@@ -47,6 +47,24 @@ Como el servidor planteado es stateless, la interfaz personalizada al usuario (C
 ### Vistas
 
 **Descomposición del sistema (D. Módulos):**
+```mermaid
+graph TD
+    A((TROTAMUNDOS)) ---- B((Conexiones Externas))
+        B ---- BA((APIs Agencias))
+        B ---- BB((APIs Correo))
+
+    A --- C((Núcleo de Negocio))
+        C ---- D(("Dashboard (UI Viajero) "))
+            D ---- G((Presentación de reservas))
+                G --- GA((Cliente Web))
+                G -- GB((Cliente Móbil))
+            D ---- E((Importación manual))
+            D ---- F((Funcionalidad Secundaria *))
+    C ---- J((Autenticación))
+        J ---- K((Control de Permisos))
+        J ---- H((Gestión de perfiles de usuario))
+
+```
 
 **Vista estructural (C&C):**
 Mostrar cliente web, movil y el localstorage, como se manejan las preferencias y como se obtienen los datos
