@@ -37,101 +37,108 @@ Para satisfacer los requerimientos del sistema, creemos conveniente optar por la
 Creemos que las opciones "Detectar intruso" e "Integridad de mensaje" no las creemos las mejores opciones debido a que sus contras agregan demasiada funcionalidad, lo que empeora el funcionamiento general del sistema.
 
 ## PASO 5 - Instanciar elementos, asignar responsabilidades y definir interfaces
-
-Si es la primera vez que un usuario quiere iniciar en el sistema, se le solicitará permisos para interactuar con su cuenta de email, mediante la utilización de OAuth, y para iniciar, los usuarios deben acceder con email y contraseña. A la hora encriptar los datos, se utilizara https, con lo que solo es necesario tener los credenciales para poder utilizarlo, y mediante la notificación al usuario sobre una situación que excede en decisiones al servidor, se le darán dos opciones: aceptar la solicitud, en caso de que el usuario quiera que el usuario aún no autorizado acceda al itinerario propio, o rechazar la solicitud, en caso de que sea una persona que el usuario considere no apropiada para acceder al mismo.
+Para iniciar sesión, los usuarios deben acceder con email y contraseña.
+Cuando el Viajero quiera añadir un correo electrónico para ser escaneado, se le solicitará permisos para usar dicha plataforma. Esto será gestionado mediante la utilización de OAuth.
+Todas las conexiones se harán a través de protocolo HTTPS.
+Ante un intento de ingreso a itinerario compartido no autorizado se notificará al usuario, dándole opción de aceptar o rechazar la solicitud. Esto define los próximos accesos del potencial intruso.
 
 ## PASO 6 - Documentación
 
 
 
 ### Vistas
-
-
-
-### Vistas
-
-**Descomposición del sistema (D. Módulos):**
+**Descomposición actual del sistema (D. Módulos):**
 
 ```mermaid
 graph TD
-    A((Trotamundos)) ---- B((Conexiones externas))
-    B ---- BA((Conexion APIs))
-    B ---- BB((Conexion email))
-    A ---- C((Lógica Trotamundos))
-    A ---- J((Autenticación))
-    J ---- K((Seguridad de itinerarios))
-    J ---- H((Manejo de usuarios))
-    C ---- H
-    C ---- D((Operaciones del usuario))
-    C ---- G((Presentación dashboard))
-    D ---- E((Lectura de arreglos))
-    D ---- F((Escritura manual))
-    C ---- I((Funcionalidades adicionales))
+    A((TROTAMUNDOS)) ---- B((Conexiones Externas))
+        B ---- BA((APIs Agencias))
+        B ---- BB((APIs Correo))
+
+    A --- C((Núcleo de Negocio))
+        C ---- D(("Dashboard (UI Viajero) "))
+            D ---- G((Presentación de reservas))
+            D ---- E((Importación manual))
+            D ---- F((Funcionalidad Secundaria *))
+    C ---- J((Autenticación))
+        J ---- K((Control de Permisos))
+        J ---- H((Gestión de perfiles de usuario))
 
 ```
+*) _Funcionalidad secundaria_ hace referencia al sistema de recomendación que será añadido al diseño e implementación en la segunda entrega.
 
+**Vistas comportamentales:**
 
-
-**Vista comportamental:**
-
+1. Autenticación y Autorización de Email
 ```mermaid
     sequenceDiagram
-    autonumber
-    actor U as Usuario [ U ]
-    actor UI as Usuario Invitado / No Autorizado [ UI ]
+    actor V as Viajero [ V ]
     participant C as Cliente (Frontend)
     participant S as Servidor (Backend)
     participant OAuth as Proveedor de Email (OAuth2)
     participant BD as Base de Datos
 
-    %% 1. Autenticación y Consentimiento inicial
-    rect rgb(41, 12, 12)
-    note over U, OAuth: 1. Autenticación y Autorización de Email (HTTPS / TLS)
-    U->>C: Ingresa Email y Contraseña
+    V->>C: Ingresa Email y Contraseña
     C->>S: POST /login (Cifrado vía HTTPS)
     S->>BD: Validar credenciales
     BD-->>S: Credenciales válidas
+    S-->>C: Sesión iniciada con éxito
 
-    alt Primera vez en el sistema
-        S-->>C: Requiere permisos de Email
+    alt Desea conectar un correo electrónico
+        V->>C: Ingresa e-mail a conectar
         C->>OAuth: Solicitar consentimiento de acceso al Email
-        OAuth-->>U: Mostrar pantalla de permisos
-        U->>OAuth: Otorga permisos
+        OAuth-->>V: Mostrar pantalla de permisos
+        V->>OAuth: Otorga permisos
         OAuth-->>C: Código de autorización / Token
         C->>S: Enviar Token de Email
         S->>BD: Guardar tokens e información de perfil
     end
-    S-->>C: Sesión iniciada con éxito (JWT / Session Token)
-    end
 
-    %% 2. Intento de acceso a itinerario no autorizado y Notificación
-    rect rgb(10, 28, 46)
-    note over UI, U: 2. Solicitud de Acceso e Intervención del Usuario
-    UI->>C: Solicita ver el itinerario de U
+```
+En esta vista dinámica se muestra el procedimiento para vincular una cuenta de correo (para escaneo automático).
+
+2. Intento de acceso a itinerario no autorizado y proceso de autorización
+```mermaid
+    sequenceDiagram
+    actor V as Viajero [ V ]
+    actor B as Amigo [ B ]
+    participant C as Cliente (Frontend)
+    participant S as Servidor (Backend)
+    participant BD as Base de Datos
+
+    B->>C: Solicita ver el itinerario de V
     C->>S: GET /itinerarios/{id} (Cifrado vía HTTPS)
-    S->>BD: Verificar permisos de UI sobre el itinerario
-    BD-->>S: UI no está autorizado
+    S->>BD: Verificar permisos de B sobre el itinerario
+    
+    alt No autorizado:
+        BD-->>S: B no está autorizado
+        S->>C: Enviar notificación de solicitud de acceso
+        C->>V: Presentar notificación
 
-    S->>U: Enviar notificación de solicitud de acceso
-    note over U: Decisiones que exceden la lógica del servidor
-
-    alt Opción 1: Aceptar solicitud
-        U->>S: Responder "Aceptar"
-        S->>BD: Registrar a UI en la lista de acceso permitido
-        S-->>C: Permiso concedido
-        C-->>UI: Muestra el itinerario
-    else Opción 2: Rechazar solicitud
-        U->>S: Responder "Rechazar"
-        S->>BD: Registrar rechazo / Bloquear acceso
-        S-->>C: Acceso denegado
-        C-->>UI: Muestra mensaje de error (No autorizado)
-    end
+        V->>C: Decision
+        rect rgb(255, 148, 148, 0.5)
+            alt Decision == 'acepta'
+                C->>S: Responder "Aceptar"
+                S->>BD: Registrar a B en la lista de acceso permitido
+                S-->>C: Itinerario compartido
+                C-->>B: Presenta el itinerario
+            else Decision == 'rechaza'
+                C->>S: Responder "Rechazar"
+                S->>BD: Registrar rechazo / Bloquear acceso
+                S-->>C: Acceso denegado
+                C-->>B: Muestra mensaje de error (No autorizado)
+            end
+        end
+        
+    else Tiene permisos
+        BD-->>S: B está autorizado
+        S-->>C: Itinerario compartido
+        C-->>B: Presenta el itinerario
     end
 ```
 
 
-
-Se muestran en un diagrama de secuencias las posibles alternativas de un usuario intentando ver un itinerario compartido (con o sin login, con o sin autorización, el sistema de autorización en sí mismo).
+Se muestran en un diagrama de secuencias las posibles alternativas de un usuario logeado intentando ver un itinerario compartido (con o sin autorización) e involucra el sistema de autorización en sí mismo.
 
 ### ADRs generados
 
