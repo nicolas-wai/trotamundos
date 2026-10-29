@@ -21,7 +21,7 @@ Debido a que la única manera de que un usuario pueda acceder al itinerario de o
 
 ## Resultado de la decisión
 
-Opción elegida: Informar al usuario del posible intruso
+Opción elegida: Informar al usuario del posible intruso, lo que da mayor transparencia de la situación en ese momento
 
 ### Consecuencias
 
