@@ -1,7 +1,7 @@
 ---
 estado: aceptada
 fecha: 2026-10-24
-fuente: { Grupo | LLM }
+fuente: Grupo
 ---
 
 # Uso de Cola de mensajes P2P para la integración asíncrona

@@ -123,11 +123,9 @@ Se muestran los cambios arquitectónicos realizados en la iteración (distribuci
 ### ADRs generados
 
 - ADR06 - La normalización se hace en el Broker
-- ADR07 - Manejo de fallo de proveedores (Circuit Breaker)
 - ADR08 - Balanceo de carga
 - ADR09 - Cola priorizada de requests a la BBDD
 - ADR10 - Uso de BBDD relacional cacheada
-- ADR11 - Fragmentación de la BBDD por ID de Viajero
 
 ## PASO 7 - Revisar la aplicación del método
 

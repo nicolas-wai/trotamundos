@@ -12,19 +12,19 @@ Diseñar el módulo presentación al usuario (Web y móvil), asegurando una usab
 
 ## PASO 3 - Descomposición
 
-Hay que refinar el módulo de presentación, los clientes Web y clientes Mobile. Se debe considerar que los clientes enviarán el token firmado en cada request y el esquema previamente planteado de backend genera consistencia eventual en el dashboard, pero los cambios locales se tendrán que presentar en el momento.
+Hay que refinar el módulo de presentación, los clientes Web y clientes Mobile. Se debe considerar que los clientes enviarán el token firmado en cada request y el esquema previamente planteado de backend genera consistencia eventual en el dashboard, pero los cambios locales se presentarán en el momento para acortar el tiempo de respuesta.
 
 ## PASO 4 - Aplicando conceptos de diseño a los drivers seleccionados
 
 **Alternativas propuestas:**
 
-| Alternativa                                                                       | Pros                                                                                    | Contras                                                                               | Drivers relacionados        |     |     |     |     |     |     |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------- | --- | --- | --- | --- | --- | --- |
-| Reflejar los cambios manuales automáticamente                                     | Experiencia mas fluida, evita que el cliente piense que su operación no funcionó        | Complejidad para manejar rollbacks ante falla en el backend                           | QA02, QA03                  |     |     |     |     |     |     |
-| Solo reflejar en el dashboard lo que hay en la base de datos                      | Consistencia clara                                                                      | El usuario ve el dashboard con delay mientras la base se actualiza                    | QA02, QA03 (Negativo), QA11 |     |     |     |     |     |     |
-| Enviar solo la informacion critica que mostrará en el dashboard (Reducir payload) | Reduce el trafico de red, acelera el renderizado                                        | Posteriormente, el usuario tendrá que realizar llamadas adicionales para los detalles | QA02, QA03, QA11            |     |     |     |     |     |     |
-| Enviar toda la información completa de cada arreglo de viaje                      | No requiere recargar la pagina para ver detalles                                        | Aumenta el tamaño del payload                                                         | QA02, QA03 (Negativo)       |     |     |     |     |     |     |
-| Maintain user model                                                               | El sistema muestra una experiencia mas personalizada en base a sus preferencias previas | Requiere permisos del cliente para almacenar sus preferencias                         | QA11                        |     |     |     |     |     |     |
+| Alternativa                                                                       | Pros                                                                                    | Contras                                                                               | Drivers relacionados        |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------- |
+| Solo reflejar en el dashboard lo que hay en la base de datos                      | Consistencia clara                                                                      | El usuario ve el dashboard con delay mientras la base se actualiza                    | QA02, QA03 (Negativo), QA11 |
+| Enviar solo la informacion critica que mostrará en el dashboard (Reducir payload) | Reduce el trafico de red, acelera el renderizado                                        | Posteriormente, el usuario tendrá que realizar llamadas adicionales para los detalles | QA02, QA03, QA11            |
+| Reflejar los cambios manuales automáticamente                                     | Experiencia mas fluida, evita que el cliente piense que su operación no funcionó        | Complejidad para manejar rollbacks ante falla en el backend                           | QA02, QA03                  |
+| Enviar toda la información completa de cada arreglo de viaje                      | No requiere recargar la pagina para ver detalles                                        | Aumenta el tamaño del payload                                                         | QA02, QA03 (Negativo)       |
+| Maintain user model                                                               | El sistema muestra una experiencia mas personalizada en base a sus preferencias previas | Requiere permisos del cliente para almacenar sus preferencias                         | QA11                        |
 
 ### 4.1 - Tiempos de respuesta
 
@@ -40,13 +40,31 @@ Tanto el cliente web como movil, deben renderizar el dashboard realizando reques
 
 Además, si el usuario crea o actualiza un arreglo de viaje manualmente, se debe ver reflejado instantaneamente sin esperar la latencia del backend/base de datos
 
-Como el servidor planteado es stateless, ls interfaz personalizada al usuario (Como orden de elementos, modo claro/oscuro, etc.) son alamcenadas como cookies del lado del cliente (Tipo LocalStorage)
+Como el servidor planteado es stateless, la interfaz personalizada al usuario (Como orden de elementos, modo claro/oscuro, etc.) son almacenadas como cookies del lado del cliente (Tipo LocalStorage)
 
 ## PASO 6 - Documentación
 
 ### Vistas
 
 **Descomposición del sistema (D. Módulos):**
+```mermaid
+graph TD
+    A((TROTAMUNDOS)) ---- B((Conexiones Externas))
+        B ---- BA((APIs Agencias))
+        B ---- BB((APIs Correo))
+
+    A --- C((Núcleo de Negocio))
+        C ---- D(("Dashboard (UI Viajero) "))
+            D ---- G((Presentación de reservas))
+                G --- GA((Cliente Web))
+                G -- GB((Cliente Móbil))
+            D ---- E((Importación manual))
+            D ---- F((Funcionalidad Secundaria *))
+    C ---- J((Autenticación))
+        J ---- K((Control de Permisos))
+        J ---- H((Gestión de perfiles de usuario))
+
+```
 
 **Vista estructural (C&C):**
 Mostrar cliente web, movil y el localstorage, como se manejan las preferencias y como se obtienen los datos

@@ -1,7 +1,7 @@
 ---
-estado: Aceptada
+estado: aceptada
 fecha: 2026-10-28
-fuente: grupo
+fuente: Grupo
 ---
 
 # Tratamiento de consultas y escrituras
