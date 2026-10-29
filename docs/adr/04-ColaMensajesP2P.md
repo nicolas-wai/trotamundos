@@ -8,7 +8,7 @@ fuente: { Grupo | LLM }
 
 ## Contexto y Problema
 
-Al refinar el módulo de integraciones externas (Iteración 2), se identificó la necesidad de definir cómo se entregará la información obtenida de los proveedores de terceros hacia la lógica central del sistema. Es necesario asegurar que la presentación de actualizaciones en el dashboard sea fluida y que el sistema tolere fallos sin afectar la experiencia de usuario. Previamente, se había elegido PubSub, pero no aplicaba para tener un unico subscriptor.
+Al refinar el módulo de integraciones externas (Iteración 2), se identificó la necesidad de definir cómo se entregará la información obtenida de los proveedores de terceros hacia la lógica central del sistema. Es necesario asegurar que la presentación de actualizaciones en el dashboard sea fluida y que el sistema tolere fallos sin afectar la experiencia de usuario.
 
 
 ## Decision Drivers
@@ -23,7 +23,7 @@ Al refinar el módulo de integraciones externas (Iteración 2), se identificó l
 
 ## Resultado de la decisión
 
-Opción elegida: Cola de mensajes punto a punto, porque permite procesar las actualizaciones de los sistemas externos de forma asíncrona, desacoplando completamente al productor (el middleware de integraciones) del consumidor (la lógica central). Se eligió en vez de Pub-Sub, ya que en nuestro contexto el consumidor de los datos será únicamente el propio sistema, haciendo innecesaria la complejidad de multiples consumidores.
+Opción elegida: Cola de mensajes punto a punto, porque permite procesar las actualizaciones de los sistemas externos de forma asíncrona, desacoplando completamente al productor (el middleware de integraciones) del consumidor (la lógica central).
 
 ### Consecuencias
 
