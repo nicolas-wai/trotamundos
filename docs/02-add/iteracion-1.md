@@ -9,6 +9,7 @@ Definir la estructura general del sistema Trotamundos: Descomponer el sistema Tr
 - US01 - Dashboard
 - Constraint 1 - Uso desde web o dispositivo móvil
 - QA13 - Multiregión
+
 Estos drivers no se abordan concretamente pero son importantes a tener en cuenta para pensar la estructura general: QA04 (Inactividad no planificada), Concern 1 (Tecnologias e interfaces genéricas)
 
 
