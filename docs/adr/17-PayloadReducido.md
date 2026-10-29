@@ -1,65 +1,43 @@
 ---
 estado: aceptada
-fecha: { YYYY-MM-DD de la ultima actualización }
+fecha: 2026-10-29
 fuente: Grupo
 ---
 
-# Titulo corto, representativo del problema solucionado y la solucion encontrada
+# Transferencia de información crítica
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
+Ante una demanda de performance, es razonable seleccionar que elementos serán presentados al usuario al interactuar con el sistema. Para ello, debemos resolver de qué manera este podrá verlos
 
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- QA03 - Primer contenido mobile
+- QA02 - Tiempo respuesta Web
+- QA11 - UI Simple centrada en el viaje
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Reducir payload
+- Solo reflejar en el dashboard lo que hay en la base de datos
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
-
-<!-- This is an optional element. Feel free to remove. -->
+Opción elegida: Reducir payload, porque el objetivo principal es que el usuario vea la información del dashboard de la manera más rápida posible, por lo que hay que elegir una alternativa que garanice velocidad.
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque reduce el trafico de red
+- Bueno, porque acelera el renderizado
+- Malo, porque el usuario deberá realizar llamadas para poder ver mayor detalle
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Se utilizara esta opción para reducir el tiempo de respuesta del cliente, aunque no obtengamos transparencia real con el cliente, pero no se dependerá de los datos del backend.
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Reflejar lo que hay en la base de datos
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
-
-### {title of other option}
-
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
+- Bueno, porque existe consistencia clara
+- Malo, porque el usuario ve el dashboard con delay mientras la base se actualiza (peor performance)
