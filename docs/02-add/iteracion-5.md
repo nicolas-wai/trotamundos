@@ -1,168 +1,71 @@
 # Iteración 5 - Presentación del sistema "Trotamundos"
 
 ## PASO 2 - Objetivo de la Iteración
+
 Diseñar el módulo presentación al usuario (Web y móvil), asegurando una usabilidad apta para centralizar información y garantizando tiempos de respuesta óptimos. Tiene que seguir la arquitectura stateless planteado en el ADR16 y aprovechar los mecanismos optimizados del backend.
 
 **Drivers a desarrollar en la iteración:**
+
 - QA03 - Primer contenido mobile
 - QA02 - Tiempo respuesta Web
 - QA11 - UI Simple centrada en el viaje
 
-
 ## PASO 3 - Descomposición
+
 Hay que refinar el módulo de presentación, los clientes Web y clientes Mobile. Se debe considerar que los clientes enviarán el token firmado en cada request y el esquema previamente planteado de backend genera consistencia eventual en el dashboard, pero los cambios locales se tendrán que presentar en el momento.
 
 ## PASO 4 - Aplicando conceptos de diseño a los drivers seleccionados
 
 **Alternativas propuestas:**
 
-| ALTERNATIVAS                                                    | PROS | CONTRAS |   |   |   |   |   |   |   |
-|-----------------------------------------------------------------|------|---------|---|---|---|---|---|---|---|
-| Reflejar los cambios manuales automáticamente                   |      |         |   |   |   |   |   |   |   |
-| Solo reflejar en el dashboard lo que hay en la base de datos    |      |         |   |   |   |   |   |   |   |
-| Enviar solo la informacion critica que mostrará en el dashboard |      |         |   |   |   |   |   |   |   |
-| Enviar toda la información completa de cada arreglo de viaje    |      |         |   |   |   |   |   |   |   |
-|                                                                 |      |         |   |   |   |   |   |   |   |
-|                                                                 |      |         |   |   |   |   |   |   |   |
-|                                                                 |      |         |   |   |   |   |   |   |   |
-|                                                                 |      |         |   |   |   |   |   |   |   |
-|                                                                 |      |         |   |   |   |   |   |   |   |
-
+| Alternativa                                                                       | Pros                                                                                    | Contras                                                                               | Drivers relacionados        |     |     |     |     |     |     |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------- | --- | --- | --- | --- | --- | --- |
+| Reflejar los cambios manuales automáticamente                                     | Experiencia mas fluida, evita que el cliente piense que su operación no funcionó        | Complejidad para manejar rollbacks ante falla en el backend                           | QA02, QA03                  |     |     |     |     |     |     |
+| Solo reflejar en el dashboard lo que hay en la base de datos                      | Consistencia clara                                                                      | El usuario ve el dashboard con delay mientras la base se actualiza                    | QA02, QA03 (Negativo), QA11 |     |     |     |     |     |     |
+| Enviar solo la informacion critica que mostrará en el dashboard (Reducir payload) | Reduce el trafico de red, acelera el renderizado                                        | Posteriormente, el usuario tendrá que realizar llamadas adicionales para los detalles | QA02, QA03, QA11            |     |     |     |     |     |     |
+| Enviar toda la información completa de cada arreglo de viaje                      | No requiere recargar la pagina para ver detalles                                        | Aumenta el tamaño del payload                                                         | QA02, QA03 (Negativo)       |     |     |     |     |     |     |
+| Maintain user model                                                               | El sistema muestra una experiencia mas personalizada en base a sus preferencias previas | Requiere permisos del cliente para almacenar sus preferencias                         | QA11                        |     |     |     |     |     |     |
 
 ### 4.1 - Tiempos de respuesta
 
+Elegimos las alternativas "Reflejar los cambios manuales automáticamente" y "Enviar solo la información critica" para atacar el tiempo de respuesta en el cliente web y la primera visualizacion de contenido en el cliente mobile. Ambas tácticas apuntan a no depender de todos los datos que contiene el backend. Las otras opciones quedan descartadas por degradar el performance del sistema en el cliente.
 
 ### 4.2 - UI Amigable
 
+Elegimos la táctica "Maintain user model" para lograr una UI adaptada al usuario, centrada en el viaje
 
 ## PASO 5 - Instanciar elementos, asignar responsabilidades y definir interfaces
-El módulo integraciones externas se estructura con Ports and Adapters que expone un único puerto de proveedores externos y un adapter por tipo de proveedor (email, agencias, sistemas de viajes).
-En el módulo del puerto se incluye un middleware que recibe las actualizaciones de los sistemas externos y coloca estas actualizaciones en la cola para luego ser consumidos por la lógica central del sistema de forma asíncrona.
 
+Tanto el cliente web como movil, deben renderizar el dashboard realizando requests al servidor, el cual le deberá proveer una response con unicamente los datos esenciales para mostrar en la interfaz principal.
+
+Además, si el usuario crea o actualiza un arreglo de viaje manualmente, se debe ver reflejado instantaneamente sin esperar la latencia del backend/base de datos
+
+Como el servidor planteado es stateless, ls interfaz personalizada al usuario (Como orden de elementos, modo claro/oscuro, etc.) son alamcenadas como cookies del lado del cliente (Tipo LocalStorage)
 
 ## PASO 6 - Documentación
 
 ### Vistas
-**Diagrama de Componentes y Conectores:**
 
-```mermaid
-flowchart LR
+**Descomposición del sistema (D. Módulos):**
 
-    subgraph SRV ["Servidor monolito modular / Sistema propio"]
-        subgraph INT ["Módulo Integraciones (Ports & Adapters)"]
-            AD_EMAIL@{ shape: stadium, label: "Adapter Email" }
-            AD_AGENCY@{ shape: stadium, label: "Adapter Agencias" }
-            AD_TRAVEL@{ shape: stadium, label: "Adapter Viajes" }
-            PORT["Puerto Único de Proveedores"]
-        end
-            QUEUE["Cola de Mensajes"]
-        subgraph CORE ["Lógica Central"]
-            VIA["Arreglos de viaje"]
-        end
-    end
-    subgraph EXT_SYS ["Sistemas externos"]
-        EXT_EMAIL["Proveedor de Email"]
-        EXT_AGENCY["Agencias"]
-        EXT_TRAVEL["Sistemas de Viajes"]
-    end
+**Vista estructural (C&C):**
+Mostrar cliente web, movil y el localstorage, como se manejan las preferencias y como se obtienen los datos
 
-    %% Relaciones externas hacia los adaptadores
-    EXT_EMAIL <-->|"revisa/devuelve actualizaciones"| AD_EMAIL
-    EXT_AGENCY <-->|"revisa/devuelve actualizaciones"| AD_AGENCY
-    EXT_TRAVEL <-->|"revisa/devuelve actualizaciones"| AD_TRAVEL
-
-    %% Relaciones internas de Ports & Adapters y la Cola
-    AD_EMAIL --> PORT
-    AD_AGENCY --> PORT
-    AD_TRAVEL --> PORT
-    PORT -->|"coloca actualizaciones"| QUEUE
-    QUEUE -->|"consume de forma asíncrona"| VIA
-
-    %% Estilos aplicados
-    classDef core fill:#0000ff,color:#ffffff
-    classDef external fill:#ffff00,color:#000000
-
-    class ADPTR,AD_EMAIL,AD_AGENCY,AD_TRAVEL,PORT,QUEUE,VIA core
-    class EXT_EMAIL,EXT_AGENCY,EXT_TRAVEL external
-```
-
-- Amarillo: Sistemas externos
-- Rectángulos azules: Módulos del sistema
-- Píldoras azules: Adaptadores de puertos de nuestro sistema
-
-La vista busca mostrar los módulos involucrados en la implementación de "ports and adapters" y "cola asíncrona" dentro del servidor.
-
-**Diagrama de secuencias:**
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Email as Sistema Email
-    actor Agencia as Sistema Agencia
-    actor Viajes as Sistema Viajes
-
-    box Módulo Integraciones Externas (Ports & Adapters)
-        participant EmailAdapter as Adapter Email
-        participant AgenciaAdapter as Adapter Agencias
-        participant ViajesAdapter as Adapter Viajes
-        participant Puerto as Puerto Proveedores
-        participant Middleware as Middleware Actualizaciones
-    end
-
-    box Infraestructura & Sistema Core
-        participant Cola as Cola de Mensajes (Queue)
-        participant Core as Lógica Central
-    end
-
-    %% Entrada de datos desde proveedores
-    alt Notificación desde Email
-        Email->>EmailAdapter: Notificar actualización
-        activate EmailAdapter
-        EmailAdapter->>Puerto: Normalizar evento al modelo del puerto
-        activate Puerto
-    else Notificación desde Agencias
-        Agencia->>AgenciaAdapter: Notificar actualización
-        activate AgenciaAdapter
-        AgenciaAdapter->>Puerto: Normalizar evento al modelo del puerto
-    else Notificación desde Sistemas de Viajes
-        Viajes->>ViajesAdapter: Notificar actualización
-        activate ViajesAdapter
-        ViajesAdapter->>Puerto: Normalizar evento al modelo del puerto
-    end
-
-    %% Procesamiento del Middleware dentro del módulo del Puerto
-    Puerto->>Middleware: Transferir evento de actualización
-    activate Middleware
-    Middleware->>Cola: Publicar actualización en la cola (Enqueue)
-    activate Cola
-    Cola-->>Middleware: Confirmación de publicación (ACK)
-    deactivate Cola
-    Middleware-->>Puerto: Procesado correctamente
-    deactivate Middleware
-
-    Puerto-->>EmailAdapter: Respuesta del puerto (OK)
-    deactivate Puerto
-    EmailAdapter-->>Email: Confirmación de recepción (202 Accepted)
-    deactivate EmailAdapter
-
-    %% Consumo Asíncrono por la Lógica Central
-    Note over Cola, Core: Procesamiento Asíncrono
-
-    loop Consumo continuo
-        Core->>Cola: Escuchar / Polling de nuevos mensajes
-        activate Cola
-        Cola-->>Core: Entregar evento de actualización
-        deactivate Cola
-    end
-```
-
-En este diagrama buscamos dar una vista dinámica del consumo de servicios externos y posterior formateo y publicación interna hasta llegar a la lógica central.
+**Vista comportamental (Secuencia):**
+Como las request reciben un payload reducido y como interactuan con la creacion manual (se muestra intantaneo), y tambien se mandan al backend para que lo confirme posteriormente
 
 ### ADRs generados
+
 Las decisiones de esta iteración se documentan en los siguientes Registros:
-- ADR03 - Uso de Publisher-Subscriber (rechazado)
-- ADR04 - Uso de "cola asincrona punto a punto" para actualizaciones
-- ADR05 - Uso de estilo Ports & Adapters
+
+- ADR17 - Payload reducido en la interfaz
+- ADR18 - Reflejar actualizaciones manuales
+- ADR19 - Personalizacion en LocalStorage
 
 ## PASO 7 - Revisar la aplicación del método
 
-Se refinó el módulo más crítico en performance e interoperabilidad con terceros. Se concentra toda la comunicación en este modulo, aislando el resto del sistema de los mismos. Falta definir con qué intervalo de tiempo hará las consultas el middleware para asegurar los tiempos requeridos por los escenarios. Consideramos que lo mas critico próximo es el ámbito de la escalabilidad del sistema.
+Se refinó el módulo de presentación (clientes Web y Móvil), asegurando la compatibilidad con decisiones previas como el server stateless y las tácticas de optimizacion de consultas a la base de datos. Se cubrieron correctamente los drivers de usabilidad y respuesta al cliente.
+
+Queda pendiente definir como tratar rollbacks si falla en red o backend (El cliente ya vió su cambio, pero no persistió).
+
+El diseño actual ya aborda los drivers prioritarios de negocio, consideramos que no son necesarias más iteraciones para descomponer, podria realizarse una iteracion extra para definir puntos sueltos centrados en elementos especificos.
