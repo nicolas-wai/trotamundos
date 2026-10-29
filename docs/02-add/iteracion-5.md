@@ -12,7 +12,7 @@ Diseñar el módulo presentación al usuario (Web y móvil), asegurando una usab
 
 ## PASO 3 - Descomposición
 
-Hay que refinar el módulo de presentación, los clientes Web y clientes Mobile. Se debe considerar que los clientes enviarán el token firmado en cada request y el esquema previamente planteado de backend genera consistencia eventual en el dashboard, pero los cambios locales se presentarán en el momento para acortar el tiempo de respuesta.
+Hay que refinar el módulo de presentación. Se debe considerar que los clientes enviarán el token firmado en cada request y el esquema previamente planteado de backend genera consistencia eventual en el dashboard, pero los cambios locales se presentarán en el momento para acortar el tiempo de respuesta.
 
 ## PASO 4 - Aplicando conceptos de diseño a los drivers seleccionados
 
@@ -20,27 +20,33 @@ Hay que refinar el módulo de presentación, los clientes Web y clientes Mobile.
 
 | Alternativa                                                                       | Pros                                                                                    | Contras                                                                               | Drivers relacionados        |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------- |
+| Cliente SPA                                                                       | Compatibilidad con server stateless, alivia lógica del servidor, añade responsividad    | Aumenta tiempo de carga inicial                                                       | QA02, QA03 (Negativo)       |
+| Server Side Rendering basado en templates                                         | Carga inicial rápida, menor complejidad en cliente                                      | Reduce responsividad, delega lógica al servidor                                       | QA03, QA02                  |
 | Solo reflejar en el dashboard lo que hay en la base de datos                      | Consistencia clara                                                                      | El usuario ve el dashboard con delay mientras la base se actualiza                    | QA02, QA03 (Negativo), QA11 |
 | Enviar solo la informacion critica que mostrará en el dashboard (Reducir payload) | Reduce el trafico de red, acelera el renderizado                                        | Posteriormente, el usuario tendrá que realizar llamadas adicionales para los detalles | QA02, QA03, QA11            |
-| Reflejar los cambios manuales automáticamente                                     | Experiencia mas fluida, evita que el cliente piense que su operación no funcionó        | Complejidad para manejar rollbacks ante falla en el backend                           | QA02, QA03                  |
+| Reflejar cambios manuales automáticamente (Optimistic Update)                     | Experiencia mas fluida, evita que el cliente piense que su operación no funcionó        | Complejidad para manejar rollbacks ante falla en el backend                           | QA02, QA03                  |
 | Enviar toda la información completa de cada arreglo de viaje                      | No requiere recargar la pagina para ver detalles                                        | Aumenta el tamaño del payload                                                         | QA02, QA03 (Negativo)       |
 | Maintain user model                                                               | El sistema muestra una experiencia mas personalizada en base a sus preferencias previas | Requiere permisos del cliente para almacenar sus preferencias                         | QA11                        |
 
 ### 4.1 - Tiempos de respuesta
 
-Elegimos las alternativas "Reflejar los cambios manuales automáticamente" y "Enviar solo la información critica" para atacar el tiempo de respuesta en el cliente web y la primera visualizacion de contenido en el cliente mobile. Ambas tácticas apuntan a no depender de todos los datos que contiene el backend. Las otras opciones quedan descartadas por degradar el performance del sistema en el cliente.
+Elegimos las alternativas "Reflejar los cambios manuales automáticamente" y "Enviar solo la información crítica" para atacar el tiempo de respuesta en el cliente web y la primera visualización de contenido en el cliente mobile. Ambas tácticas apuntan a no depender de todos los datos que contiene el backend. Las otras opciones quedan descartadas por degradar el performance del sistema en el cliente.
 
 ### 4.2 - UI Amigable
 
-Elegimos la táctica "Maintain user model" para lograr una UI adaptada al usuario, centrada en el viaje
+Elegimos la táctica "Maintain user model" para lograr una UI adaptada al usuario, centrada en el viaje. Se implementa con lógica client-side
+
+### 4.3 - Diseño del cliente
+Elegimos Server Side Rendering basado en templates para el cliente web. A esto lo complementamos con funcionalidad mínima en el cliente que permita implementar la táctica de (4.1 y 4.2)
+
 
 ## PASO 5 - Instanciar elementos, asignar responsabilidades y definir interfaces
 
-Tanto el cliente web como movil, deben renderizar el dashboard realizando requests al servidor, el cual le deberá proveer una response con unicamente los datos esenciales para mostrar en la interfaz principal.
+El cliente web recibe el dashboard renderizado por el servidor. El cual mostrará, inicialmente, solo los datos esenciales para la interfaz principal. Posteriormente se podrá interactuar con la interfaz para ver más detalles (via request al servidor y recarga parcial)
 
-Además, si el usuario crea o actualiza un arreglo de viaje manualmente, se debe ver reflejado instantaneamente sin esperar la latencia del backend/base de datos
+Además, si el usuario crea o actualiza un arreglo de viaje manualmente, se debe ver reflejado instantaneamente sin esperar la latencia del backend/base de datos. Esto se logrará gracias a lógica interna del cliente (Optimistic Update)
 
-Como el servidor planteado es stateless, la interfaz personalizada al usuario (Como orden de elementos, modo claro/oscuro, etc.) son almacenadas como cookies del lado del cliente (Tipo LocalStorage)
+Como el servidor planteado es stateless, la interfaz personalizada al usuario (Como orden de elementos, modo claro/oscuro, etc.) son almacenadas como cookies del lado del cliente (Tipo LocalStorage).
 
 ## PASO 6 - Documentación
 
@@ -57,7 +63,7 @@ graph TD
         C ---- D(("Dashboard (UI Viajero) "))
             D ---- G((Presentación de reservas))
                 G --- GA((Cliente Web))
-                G -- GB((Cliente Móbil))
+                G --- GB((Cliente Móvil))
             D ---- E((Importación manual))
             D ---- F((Funcionalidad Secundaria *))
     C ---- J((Autenticación))
@@ -66,11 +72,119 @@ graph TD
 
 ```
 
-**Vista estructural (C&C):**
-Mostrar cliente web, movil y el localstorage, como se manejan las preferencias y como se obtienen los datos
+**Vista estructural (C&C)** - Componentes involucrados en el renderizado y presentación:
+```mermaid
+flowchart TD
+    subgraph Client ["Cliente Web (Navegador)"]
+        subgraph UI_Layer ["Capa de Interfaz de Usuario"]
+            View["Vistas Renderizadas (DOM)"]
+            ClientRuntime["Lógica de Cliente Minimal<br/>(Maintain User Model)"]
+        end
 
-**Vista comportamental (Secuencia):**
-Como las request reciben un payload reducido y como interactuan con la creacion manual (se muestra intantaneo), y tambien se mandan al backend para que lo confirme posteriormente
+        OptState["Gestor de Estado Optimista<br/>(en memoria)"]
+        PrefMgr["Gestor de Preferencias"]
+        LocalStorage[("LocalStorage / Cookies<br/>(Preferencias UI: Modo, Orden)")]
+        
+    end
+
+    subgraph WebServer ["Servidor Web (Stateless)"]
+        SSREngine["Módulo SSR"]
+        AuthMiddleware["Módulo Autenticación<br/>(Validación Token Firmado)"]
+        APIEndpoints["Controladores API / Endpoints"]
+    end
+
+    subgraph CoreSystem ["Sistema Core"]
+        CoreBackend[("Backend Core & Persistencia<br/>(Consistencia Eventual)")]
+    end
+
+    %% --- CONECTORES Y FLUJOS DE DATOS ---
+
+    %% Renderizado Inicial (SSR)
+    View -->|"HTTPS GET /dashboard"| SSREngine
+    SSREngine -->|"HTML + Datos Críticos Esenciales"| View
+
+    %% Manejo de Preferencias Locales
+    ClientRuntime -->|"Aplica orden/tema"| PrefMgr
+    PrefMgr <-->|"Lectura/Escritura sincrónica (Web Storage API)"| LocalStorage
+    PrefMgr -.->|"Modifica DOM (UI Amigable)"| View
+
+    %% Actualizaciones Optimistas (Creación/Edición Manual)
+    View -->|"Eventos de usuario (Crear/Editar)"| ClientRuntime
+    ClientRuntime -->|"Actualización local inmediata"| OptState
+    OptState -->|"Renderizado instantáneo"| View
+
+    ClientRuntime -->|"HTTPS POST/PUT + Bearer Token Firmado"| AuthMiddleware
+
+    %% Obtención de Datos Detallados (Recarga Parcial)
+    View -->|"HTTPS GET /detalles + Bearer Token Firmado"| AuthMiddleware
+
+    %% Procesamiento Server
+    AuthMiddleware --> APIEndpoints
+    APIEndpoints --> CoreBackend
+```
+
+**Vista comportamental (Secuencia)** - Flujo de datos entre el cliente y servidor:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    
+    box Cliente (Navegador)
+        participant UI as Vista / DOM
+        participant CR as Runtime Cliente (Optimistic Store)
+        participant LS as LocalStorage / Cookies
+    end
+
+    box Servidor & Backend
+        participant WS as Servidor Web (SSR / Auth)
+        participant Core as Backend Core
+    end
+
+    %% ESCENARIO 1: Carga Inicial de Dashboard
+    Note over U, Core: 1. Carga Inicial de Dashboard (Payload Reducido via SSR)
+    U->>UI: Solicita ingreso a /dashboard
+    UI->>WS: GET /dashboard
+    WS->>Core: Consultar solo información crítica esencial del viaje
+    Core-->>WS: Retorna dataset mínimo
+    WS-->>UI: Responde con HTML renderizado (Payload Reducido)
+    
+    UI->>LS: Consultar preferencias (Tema, Ordenación)
+    LS-->>UI: Retorna estado de personalización local
+    UI-->>U: Renderiza primera vista del Dashboard (Mínima Latencia)
+
+    %% ESCENARIO 2: Creación/Edición Manual (Optimistic Update)
+    Note over U, Core: 2. Creación Manual de Arreglo (Respuesta Instantánea + Confirmación Backend)
+    U->>UI: Crea o edita un arreglo de viaje manualmente
+    UI->>CR: Evento de envío de formulario
+
+    %% Paso Optimista Local (Instantáneo)
+    CR->>CR: Aplicar cambios en Estado Optimista local
+    CR->>UI: Renderizar nuevo/modificado viaje en pantalla
+    UI-->>U: Cambio visible al instante (Latencia percibida ~0ms)
+
+    %% Comunicación Asíncrona con Backend
+    CR->>WS: POST /api/arreglos [Header: Authorization Bearer Token Firmado]
+    activate WS
+    WS->>WS: Validar firma e integridad del Token
+    WS->>Core: Procesar modificación del itinerario
+    activate Core
+    Core-->>WS: Confirmación de persistencia realizada (200 OK / 201 Created)
+    deactivate Core
+    WS-->>CR: Confirmación exitosa del servidor
+    deactivate WS
+
+    %% Confirmación o Reversión de Estado
+    alt Persistencia Exitosa (Caso Nombrado)
+        CR->>CR: Consolidar estado local como "Sincronizado"
+        CR->>UI: (Opcional) Remueve indicador de "Guardando..."
+    else Fallo de Red o Validación Backend (Rollback)
+        CR->>CR: Revertir cambios en Estado Optimista
+        CR->>UI: Eliminar cambio de la vista y renderizar estado previo
+        UI-->>U: Mostrar notificación: "No se pudo sincronizar el cambio. Reintentando..."
+    end
+
+```
 
 ### ADRs generados
 
