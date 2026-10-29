@@ -1,47 +1,55 @@
 # Iteración 4 - Tratamiento de seguridad
 
 ## PASO 2 - Objetivo de la Iteración
+
 A estas alturas del diseño del sistema, nos parece acorde abordar la confianza y seguridad del usuario en el uso de nuestra aplicación web.
 
 **Drivers a desarrollar en la iteración:**
+
 - QA08 - Security: Acceso email
 - QA09 - Security: Itinerarios compartidos
 - QA15 - Interoperability: Proveedores email
 
-
 ## PASO 3 - Descomposición
+
 Con una buena base de la lógica ya abordada, es fundamental tener un control de que datos se muestran o tranfieren entre usuarios, por lo que controlaremos las situaciones de riesgo que puedan llegar a crearse.
 
 Los principales modulos a desarollar es el de autenticación, conexion con integraciones externas (especificamente con mails) y una idea de como será el "compartir itinerarios".
-
 
 ## PASO 4 - Aplicando conceptos de diseño a los drivers seleccionados
 
 **Alternativas propuestas:**
 
-| Alternativa | Pros | Contras | Drivers relacionados |
-|---|---|---|---|
-| Encriptar datos | Protege la información en la base de datos, protege los datos en tránsito | Sobrecosto computacional por cifrado/descifrado, requiere gestión de claves | QA08, QA09 |
-| Detectar intruso | Permite rechazar amenazas a tiempo | Overhead por chequeo ante cada acceso, agrega necesidad de una base de datos con información de comportamiento malicioso | QA08 |
-| Integridad de mensaje | Asegura que los mensajes e itinerarios no sean alterados en tránsito | Aumenta la latencia en la integridad del mensaje, complejidad en gestión de firmas/claves | QA08, QA09 |
-| Informar al usuario del posible intruso | El usuario tiene consciencia de la situación, la decisión es ajena al sistema pero fácil de implementar | Depende de la respuesta activa del usuario, posible fatiga de notificaciones | QA08, QA09 |
-| Autenticar usuario | Rápido de validar, asegura la identidad antes de otorgar acceso | Requiere gestión segura de sesiones/tokens | QA08 |
-| Solicitar autorización del usuario para acceder a su email | Decisión del usuario, control de los mensajes recibidos | El usuario puede perder funcionalidades si rechaza el permiso | QA08, QA15 |
+
+| Alternativa                                                | Pros                                                                                                    | Contras                                                                                                                  | Drivers relacionados |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| Encriptar datos                                            | Protege la información en la base de datos, protege los datos en tránsito                               | Sobrecosto computacional por cifrado/descifrado, requiere gestión de claves                                              | QA08, QA09           |
+| Detectar intruso                                           | Permite rechazar amenazas a tiempo                                                                      | Overhead por chequeo ante cada acceso, agrega necesidad de una base de datos con información de comportamiento malicioso | QA08                 |
+| Integridad de mensaje                                      | Asegura que los mensajes e itinerarios no sean alterados en tránsito                                    | Aumenta la latencia en la integridad del mensaje, complejidad en gestión de firmas/claves                                | QA08, QA09           |
+| Informar al usuario del posible intruso                    | El usuario tiene consciencia de la situación, la decisión es ajena al sistema pero fácil de implementar | Depende de la respuesta activa del usuario, posible fatiga de notificaciones                                             | QA08, QA09           |
+| Autenticar usuario                                         | Rápido de validar, asegura la identidad antes de otorgar acceso                                         | Requiere gestión segura de sesiones/tokens                                                                               | QA08                 |
+| Solicitar autorización del usuario para acceder a su email | Decisión del usuario, control de los mensajes recibidos                                                 | El usuario puede perder funcionalidades si rechaza el permiso                                                            | QA08, QA15           |
+
 
 Para satisfacer los requerimientos del sistema, creemos conveniente optar por las siguientes opciones:
 "Encriptar datos", "Informar al usuario del posible intruso", "Autenticar usuario" y "Solicitar autorización del usuario para acceder a su email".
 
 Creemos que las opciones "Detectar intruso" e "Integridad de mensaje" no las creemos las mejores opciones debido a que sus contras agregan demasiada funcionalidad, lo que empeora el funcionamiento general del sistema.
 
-
 ## PASO 5 - Instanciar elementos, asignar responsabilidades y definir interfaces
-Si es la primera vez que un usuario quiere iniciar en el sistema, se le solicitará permisos para interactuar con su cuenta de email, mediante la utilización de OAuth, y para iniciar, los usuarios deben acceder con email y contraseña. A la hora encriptar los datos, se utilizara https, con lo que solo es necesario tener los credenciales para poder utilizarlo, y mediante la notificación al usuario sobre una situación que excede en decisiones al servidor, se le darán dos opciones: aceptar la solicitud, en caso de que el usuario quiera que el usuario aún no autorizado acceda al itinerario propio, o rechazar la solicitud, en caso de que sea una persona que el usuario considere no apropiada para acceder al mismo.
 
+Si es la primera vez que un usuario quiere iniciar en el sistema, se le solicitará permisos para interactuar con su cuenta de email, mediante la utilización de OAuth, y para iniciar, los usuarios deben acceder con email y contraseña. A la hora encriptar los datos, se utilizara https, con lo que solo es necesario tener los credenciales para poder utilizarlo, y mediante la notificación al usuario sobre una situación que excede en decisiones al servidor, se le darán dos opciones: aceptar la solicitud, en caso de que el usuario quiera que el usuario aún no autorizado acceda al itinerario propio, o rechazar la solicitud, en caso de que sea una persona que el usuario considere no apropiada para acceder al mismo.
 
 ## PASO 6 - Documentación
 
+
+
 ### Vistas
+
+
+
 ### Vistas
+
 **Descomposición del sistema (D. Módulos):**
 
 ```mermaid
@@ -61,6 +69,8 @@ graph TD
     C ---- I((Funcionalidades adicionales))
 
 ```
+
+
 
 **Vista comportamental:**
 
@@ -119,6 +129,8 @@ graph TD
     end
 ```
 
+
+
 Se muestran en un diagrama de secuencias las posibles alternativas de un usuario intentando ver un itinerario compartido (con o sin login, con o sin autorización, el sistema de autorización en sí mismo).
 
 ### ADRs generados
@@ -127,6 +139,8 @@ Se muestran en un diagrama de secuencias las posibles alternativas de un usuario
 - ADR13 - Detección de Viajero no habilitados a ver itinerario
 - ADR14 - Autenticación de Viajero
 - ADR15 - Solicitar autorización para conectar correo electrónico
+
+
 
 ## PASO 7 - Revisar la aplicación del método
 
