@@ -25,8 +25,8 @@ Opción elegida: Encriptar datos, mediante el uso de https, lo que va a chequear
 
 ### Consecuencias
 
-- Bueno, porque protege la información de la base de datos
 - Bueno, porque protege la información en tránsito
+- Bueno, porque protege la información de la base de datos (Afecta QA09)
 - Bueno, porque el usuario reconoce fácilmente que sus datos están seguros
 - Malo, porque añade complejidad por el cifrado y descifrado de los mensajes
 - Malo, porque requiere una gestión de claves
