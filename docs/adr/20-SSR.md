@@ -22,12 +22,13 @@ El sistema nos requiere que el usuario acceda inicialmente lo más rápido posib
 
 ## Resultado de la decisión
 
-Opción elegida: Server Side Rendering basado en templates, ya que permite simplificar la responsabilidad del cliente, y logra la mayor performance inicial 
+Opción elegida: Server Side Rendering basado en templates, ya que permite simplificar la responsabilidad del cliente, y logra la mayor performance inicial
 
 ### Consecuencias
 
 - Bueno, porque obtiene una carga inicial rápida
 - Bueno, porque le delega menos complejidad al cliente
+- Bueno, porque se alinea más a los conocimientos del equipo
 - Malo, porque reduce responsividad
 - Malo, delega lógica al servidor
 
