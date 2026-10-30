@@ -2,7 +2,10 @@
 
 ## Objetivo del proyecto
 La cátedra nos presenta con el desafío de construir el prototipo para una plataforma que centralice información acerca de viajes (vuelos, hoteles, itinerarios, etc.). Como equipo nuestro objetivo es — en primera instancia — refinar requerimientos funcionales y quality attributes, definir límites del proyecto e iniciar de tal forma la documentación del proceso de diseño e implementación.
+
 Una vez sentadas las bases, corresponde tomar los drivers bien refinados, priorizarlos y darle inicio a una "round de diseño" que será llevada según el modelo Attribute-Driven-Design. En este proceso iterativo-incremental se sistematiza en etapas la tarea de definir aspectos críticos del diseño, descomponer el sistema — eliminando incertidumbre en cada paso — y elegir soluciones que se apliquen a drivers seleccionados. A lo largo del proceso es de vital importancia validar la aplicación del método en cada iteración, la constante documentación y el respeto por el modelo — que introduce certeza a la ardua tarea de diseñar arquitecturas de software —
+
+Por ultimo, nos toca aplicar el diseño generado en la round a un prototipo real. Esta implementación inicial permite ver qué tan buenas fueron las decisiones arquitectónicas tomadas.
 
 ## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
