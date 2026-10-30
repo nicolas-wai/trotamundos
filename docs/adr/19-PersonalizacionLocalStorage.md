@@ -8,7 +8,7 @@ fuente: Grupo
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
+Durante el diseño se definió que el servidor funcionara por medio de una arquitectura stateless (sin estado) para maximizar el rendimiento. Sin embargo, para ofrecer una interfaz amigable, el sistema debe recordar las preferencias visuales del usuario (modo claro/oscuro o el orden de visualización).
 
 ## Decision Drivers
 

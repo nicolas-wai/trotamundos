@@ -23,7 +23,7 @@ Ante una demanda de performance, es razonable seleccionar que elementos serán p
 
 ## Resultado de la decisión
 
-Opción elegida: Reducir payload, porque el objetivo principal es que el usuario vea la información del dashboard de la manera más rápida posible, por lo que hay que elegir una alternativa que garanice velocidad.
+Opción elegida: Reducir payload, porque el objetivo principal es que el usuario vea la información del dashboard de la manera más rápida posible, por lo que hay que elegir una alternativa que garantice velocidad.
 
 ### Consecuencias
 
