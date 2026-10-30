@@ -19,7 +19,7 @@ Ante una demanda de performance, es razonable seleccionar que elementos serán p
 ## Opciones Consideradas
 
 - Reducir payload
-- Solo reflejar en el dashboard lo que hay en la base de datos
+- Enviar toda la información completa de cada arreglo de viaje
 
 ## Resultado de la decisión
 
