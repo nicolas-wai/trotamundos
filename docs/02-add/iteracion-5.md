@@ -2,7 +2,7 @@
 
 ## PASO 2 - Objetivo de la Iteración
 
-Diseñar el módulo presentación al usuario (Web y móvil), asegurando una usabilidad apta para centralizar información y garantizando tiempos de respuesta óptimos. Tiene que seguir la arquitectura stateless planteado en el ADR16 y aprovechar los mecanismos optimizados del backend.
+Diseñar el módulo presentación, asegurando una usabilidad apta para centralizar información y garantizando tiempos de respuesta óptimos. Tiene que seguir la arquitectura stateless planteado en el ADR16 y aprovechar los mecanismos optimizados del backend.
 
 **Drivers a desarrollar en la iteración:**
 
@@ -30,7 +30,7 @@ Hay que refinar el módulo de presentación. Se debe considerar que los clientes
 
 ### 4.1 - Tiempos de respuesta
 
-Elegimos las alternativas "Reflejar los cambios manuales automáticamente" y "Enviar solo la información crítica" para atacar el tiempo de respuesta en el cliente web y la primera visualización de contenido en el cliente mobile. Ambas tácticas apuntan a no depender de todos los datos que contiene el backend. Las otras opciones quedan descartadas por degradar el performance del sistema en el cliente.
+Elegimos las alternativas "Reflejar los cambios manuales automáticamente" y "Enviar solo la información crítica" para atacar el tiempo de respuesta en el cliente web y la primera visualización de contenido en el cliente. Ambas tácticas apuntan a no depender de todos los datos que contiene el backend. Las otras opciones quedan descartadas por degradar el performance del sistema en el cliente.
 
 ### 4.2 - UI Amigable
 
@@ -127,12 +127,11 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor U as Usuario
-
+    actor U as Viajero
+    
     box Cliente (Navegador)
         participant UI as Vista / DOM
-        participant CR as Runtime Cliente (Optimistic Store)
+        participant CR as Runtime Cliente
         participant LS as LocalStorage / Cookies
     end
 
@@ -164,32 +163,37 @@ sequenceDiagram
     UI-->>U: Cambio visible al instante (Latencia percibida ~0ms)
 
     %% Comunicación Asíncrona con Backend
-    CR->>WS: POST /api/arreglos [Header: Authorization Bearer Token Firmado]
+    CR->>WS: POST HTTPS [Header: Authorization Bearer Token Firmado]
     activate WS
     WS->>WS: Validar firma e integridad del Token
     WS->>Core: Procesar modificación del itinerario
     activate Core
-    Core-->>WS: Confirmación de persistencia realizada (200 OK / 201 Created)
+    Core-->>WS: Devuelve HTTP-status-code
     deactivate Core
-    WS-->>CR: Confirmación exitosa del servidor
-    deactivate WS
+
 
     %% Confirmación o Reversión de Estado
-    alt Persistencia Exitosa (Caso Nombrado)
+    alt HTTP-status-code == 2xx
+        WS-->>CR: Confirmación exitosa del servidor
         CR->>CR: Consolidar estado local como "Sincronizado"
         CR->>UI: (Opcional) Remueve indicador de "Guardando..."
-    else Fallo de Red o Validación Backend (Rollback)
+    else HTTP-status-code != 2xx
+        WS-->>CR: Confirmación exitosa del servidor
+        deactivate WS
         CR->>CR: Revertir cambios en Estado Optimista
         CR->>UI: Eliminar cambio de la vista y renderizar estado previo
         UI-->>U: Mostrar notificación: "No se pudo sincronizar el cambio. Reintentando..."
     end
+    
 
 ```
+En esta vista mostramos la carga inicial del sitio sumado al camino crítico de modificar/crear una reserva manualmente. Por último se muestran algunos elementos de cómo implementar la actualización optimista y posibles soluciones a rollbacks por fallo de esta.
 
 ### ADRs generados
 
 Las decisiones de esta iteración se documentan en los siguientes Registros:
 
+- ADR20 - Uso de Server Side Rendering
 - ADR17 - Payload reducido en la interfaz
 - ADR18 - Reflejar actualizaciones manuales
 - ADR19 - Personalizacion en LocalStorage
@@ -197,8 +201,8 @@ Las decisiones de esta iteración se documentan en los siguientes Registros:
 
 ## PASO 7 - Revisar la aplicación del método
 
-Se refinó el módulo de presentación (clientes Web y Móvil), asegurando la compatibilidad con decisiones previas como el server stateless y las tácticas de optimizacion de consultas a la base de datos. Se cubrieron correctamente los drivers de usabilidad y respuesta al cliente.
+Se refinó el módulo de presentación para cliente web, asegurando la compatibilidad con decisiones previas como el server stateless y las tácticas de optimizacion de consultas a la base de datos. Se cubrieron correctamente los drivers de usabilidad y respuesta al cliente.
 
 Queda pendiente definir como tratar rollbacks si falla en red o backend (El cliente ya vió su cambio, pero no persistió).
 
-El diseño actual ya aborda los drivers prioritarios de negocio, consideramos que no son necesarias más iteraciones para descomponer, podria realizarse una iteracion extra para definir puntos sueltos centrados en elementos especificos.
+El diseño actual ya aborda los drivers prioritarios de negocio, consideramos que no son necesarias más iteraciones para descomponer, podría realizarse una iteración extra para definir puntos sueltos centrados en elementos específicos.

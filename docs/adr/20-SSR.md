@@ -8,11 +8,11 @@ fuente: Grupo
 
 ## Contexto y Problema
 
-El sistema nos requiere que el usuario acceda inicialmente lo más rápido posible. Sin embargo, tampoco se puede mostrar cualquier tipo de información, por lo que se buscará una solución razonable a esta situación
+Un set de drivers exigen tiempos cortos de respuesta para el primer acceso al sistema y subsecuentes actualizaciones. Debemos definir la arquitectura del cliente de modo que atienda a estas necesidades.
 
 ## Decision Drivers
 
-- QA03 - Primer contenido mobile
+- QA03 - Latencia de primer contenido
 - QA02 - Tiempo respuesta Web
 
 ## Opciones Consideradas
@@ -22,7 +22,7 @@ El sistema nos requiere que el usuario acceda inicialmente lo más rápido posib
 
 ## Resultado de la decisión
 
-Opción elegida: Server Side Rendering basado en templates, ya que permite simplificar la responsabilidad del cliente, y logra la mayor performance inicial
+Opción elegida: Server Side Rendering basado en templates, ya que permite simplificar la responsabilidad del cliente, y logra la mayor performance inicial. Su aplicación no limita el escalado de lógica en el cliente, permitiendo (por ej.) aportar responsividad en casos de uso puntuales.
 
 ### Consecuencias
 
@@ -34,7 +34,7 @@ Opción elegida: Server Side Rendering basado en templates, ya que permite simpl
 
 ### Confirmación
 
-Se justifica el uso de Server-Side Rendering (SSR) para la operación de alta/creación debido a que reduce la complejidad en el cliente, garantiza la renderización centralizada y segura de las vistas en el servidor, mejorando el tiempo de carga inicial
+Al entrar al sitio web, los tiempos de respuesta concuerdan con las métricas pedidas en QA03. Si se ejecuta un curl con petición GET al sitio, devuelve la página renderizada (no json).
 
 ## Pros y Cons de las opciones
 
