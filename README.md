@@ -1,6 +1,10 @@
 # trotamundos
 
 ## Objetivo del proyecto
+La cátedra nos presenta con el desafío de construir el prototipo para una plataforma que centralice información acerca de viajes (vuelos, hoteles, itinerarios, etc.). Como equipo nuestro objetivo es — en primera instancia — refinar requerimientos funcionales y quality attributes, definir límites del proyecto e iniciar de tal forma la documentación del proceso de diseño e implementación.
+Una vez sentadas las bases, corresponde tomar los drivers bien refinados, priorizarlos y darle inicio a una "round de diseño" que será llevada según el modelo Attribute-Driven-Design. En este proceso iterativo-incremental se sistematiza en etapas la tarea de definir aspectos críticos del diseño, descomponer el sistema — eliminando incertidumbre en cada paso — y elegir soluciones que se apliquen a drivers seleccionados. A lo largo del proceso es de vital importancia validar la aplicación del método en cada iteración, la constante documentación y el respeto por el modelo — que introduce certeza a la ardua tarea de diseñar arquitecturas de software —
+
+## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
 
 En base a esto, decidimos hacer en primera instancia las iteraciones de ADD a mano (`/docs/02-add/iteracion-n.md`). Posteriormente, se simula la iteración por medio del LLM siguiendo las recomendaciones y prompts del paper "Better Together" (`/docs/02-add/iteracion-n-llm.md`). Finalmente, estas se contrastan y ponderan, dando como resultado un conjunto de decisiones. Las mismas se documentan en formato MADR en la carpeta `/docs/adr/`. Cabe aclarar que para tener una base más firme, la iteración 1 es puramente nuestra. A partir de la iteración 2 se implementa el esquema antes descrito.
