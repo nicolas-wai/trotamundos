@@ -8,7 +8,7 @@ fuente: LLM
 
 ## Contexto y Problema
 
-En el ADR07 se planteó agregar una caché para las lecturas, pero esto no soluciona el problema de picos de trafico, ya que la caché se puede saturar. Se debe proveer un mecanismo para soportar la alta cantidad de usuario. Se pensó como 15 millones de personas como 15 millones de registros, pero este número estará multiplicado por N arreglos de viajes de cada usuario.
+En el ADR10 se planteó agregar una caché para las lecturas, pero esto no soluciona el problema de picos de trafico, ya que la caché se puede saturar. Se debe proveer un mecanismo para soportar la alta cantidad de usuario. Se pensó como 15 millones de personas como 15 millones de registros, pero este número estará multiplicado por N arreglos de viajes de cada usuario.
 
 ## Decision Drivers
 

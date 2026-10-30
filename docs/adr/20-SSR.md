@@ -4,7 +4,7 @@ fecha: 2026-10-29
 fuente: Grupo
 ---
 
-# Renderizado
+# Renderizado al cliente centrado en SSR
 
 ## Contexto y Problema
 

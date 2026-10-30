@@ -84,7 +84,7 @@ flowchart TD
         OptState["Gestor de Estado Optimista<br/>(en memoria)"]
         PrefMgr["Gestor de Preferencias"]
         LocalStorage[("LocalStorage / Cookies<br/>(Preferencias UI: Modo, Orden)")]
-        
+
     end
 
     subgraph WebServer ["Servidor Web (Stateless)"]
@@ -129,7 +129,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     actor U as Usuario
-    
+
     box Cliente (Navegador)
         participant UI as Vista / DOM
         participant CR as Runtime Cliente (Optimistic Store)
@@ -148,7 +148,7 @@ sequenceDiagram
     WS->>Core: Consultar solo información crítica esencial del viaje
     Core-->>WS: Retorna dataset mínimo
     WS-->>UI: Responde con HTML renderizado (Payload Reducido)
-    
+
     UI->>LS: Consultar preferencias (Tema, Ordenación)
     LS-->>UI: Retorna estado de personalización local
     UI-->>U: Renderiza primera vista del Dashboard (Mínima Latencia)
@@ -193,6 +193,7 @@ Las decisiones de esta iteración se documentan en los siguientes Registros:
 - ADR17 - Payload reducido en la interfaz
 - ADR18 - Reflejar actualizaciones manuales
 - ADR19 - Personalizacion en LocalStorage
+- ADR20 - Renderizado SSR
 
 ## PASO 7 - Revisar la aplicación del método
 

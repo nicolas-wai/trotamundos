@@ -1,4 +1,4 @@
-# Iteración 2 - Escalabilidad, Rendimiento y Persistencia en "Trotamundos"
+# Iteración 3 - Escalabilidad, Rendimiento y Persistencia en "Trotamundos"
 
 ## PASO 2 - Objetivo de la Iteración
 

@@ -8,7 +8,7 @@ fuente: Grupo
 
 ## Contexto y Problema
 
-Como se describe en ADR06, los proveedores pueden dar las actualizaciones de los arreglos del viajero en cualquier formato. El equipo pensó en que momento se debería normalizar los datos para que la logica de negocio pueda leer en un formato homogeneo.
+Como se describe en ADR05, los proveedores pueden dar las actualizaciones de los arreglos del viajero en cualquier formato. El equipo pensó en que momento se debería normalizar los datos para que la logica de negocio pueda leer en un formato homogeneo.
 
 ## Decision Drivers
 

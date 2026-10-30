@@ -4,7 +4,7 @@ fecha: 2026-10-28
 fuente: Grupo
 ---
 
-# La elección (ADR01) de una arquitectura causa alta centralidad
+# Monolito modular como organizacion interna del servidor
 
 ## Contexto y Problema
 
@@ -33,7 +33,7 @@ Opción elegida: Monolito modular, ya que este permite ver al servidor como una 
 
 ### Confirmación
 
-- Tener un monolito modular nos va a permitir separar las funcionalidades dentro del mismo sistema de manera segura y simple. 
+- Tener un monolito modular nos va a permitir separar las funcionalidades dentro del mismo sistema de manera segura y simple.
 
 ## Pros y Cons de las opciones
 
