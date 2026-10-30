@@ -1,6 +1,6 @@
 ---
 estado: aceptada
-fecha: { YYYY-MM-DD de la ultima actualización }
+fecha: 2026-10-29
 fuente: Grupo
 ---
 
@@ -12,54 +12,33 @@ Durante el diseño se definió que el servidor funcionara por medio de una arqui
 
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- QA11
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Maintain user model en el cliente (LocalStorage)
+- Almacenar las preferencias de presentación visual en la base de datos (Backend)
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
-
-<!-- This is an optional element. Feel free to remove. -->
+Opción elegida: Maintain user model en el cliente (LocalStorage / AsyncStorage), porque permite adaptar la interfaz de manera instantánea en el dispositivo del usuario sin trafico de red adicional. Ademas al tener las preferencias en la memoria del dispositivo, el renderizado es inmediato y favorece una interfaz centrada en el viaje y amigable, sin sacrificar los tiempos de respuesta.
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque el sistema muestra una experiencia más personalizada basada en preferencias
+- Bueno, porque permite no almacenar ni tener que consultar datos puramente orientados a la estética, manteniendo la arquitectura stateless
+- Malo, porque la personalización queda atada al dispositivo físico
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Para confirmar esta decisión, durante el desarrollo se deberá probar que:
+- Los cambios de interfaz (como el modo oscuro o el orden de los viajes) se guarden en el dispositivo del usuario.
+- Al abrir la app, la pantalla se dibuje usando estas preferencias al instante, antes de pedir cualquier dato al backend.
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Almacenar las preferencias de presentación visual en la base de datos (Backend)
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
+- Bueno, porque el usuario tendría exactamente la misma experiencia visual sincronizada sin importar desde donde ingresa al sistema
+- Malo, porque obliga a descaragr informacion adicional antes de mostrar el Dashboard, perjudicando el tiempo de despliegue inicial
 
-### {title of other option}
-
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
