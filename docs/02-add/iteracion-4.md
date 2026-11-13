@@ -65,7 +65,7 @@ graph TD
         J ---- H((Gestión de perfiles de usuario))
 
 ```
-*) _Funcionalidad secundaria_ hace referencia al sistema de recomendación que será añadido al diseño e implementación en la segunda entrega.
+**Leyenda (vista de módulos):** cada círculo es un módulo del sistema. Una línea indica "contiene a" (descomposición), el módulo de arriba contiene al de abajo El asterisco marca la funcionalidad secundaria (sistema de recomendación), prevista para la segunda entrega.
 
 **Vistas comportamentales:**
 
@@ -97,6 +97,9 @@ graph TD
 ```
 En esta vista dinámica se muestra el procedimiento para vincular una cuenta de correo (para escaneo automático).
 
+**Leyenda:** cada columna es un participante (Viajero, Cliente, Servidor, Proveedor de email OAuth2 y Base de datos) y el tiempo avanza hacia abajo. Flecha continua: request. Flecha punteada: respuesta. El bloque `alt` muestra el camino opcional de conectar un correo electrónico. Todas las conexiones entre cliente y servidor usan HTTPS.
+
+
 2. Intento de acceso a itinerario no autorizado y proceso de autorización
 ```mermaid
     sequenceDiagram
@@ -109,7 +112,7 @@ En esta vista dinámica se muestra el procedimiento para vincular una cuenta de 
     B->>C: Solicita ver el itinerario de V
     C->>S: GET /itinerarios/{id} (Cifrado vía HTTPS)
     S->>BD: Verificar permisos de B sobre el itinerario
-    
+
     alt No autorizado:
         BD-->>S: B no está autorizado
         S->>C: Enviar notificación de solicitud de acceso
@@ -129,7 +132,7 @@ En esta vista dinámica se muestra el procedimiento para vincular una cuenta de 
                 C-->>B: Muestra mensaje de error (No autorizado)
             end
         end
-        
+
     else Tiene permisos
         BD-->>S: B está autorizado
         S-->>C: Itinerario compartido
@@ -140,15 +143,35 @@ En esta vista dinámica se muestra el procedimiento para vincular una cuenta de 
 
 Se muestran en un diagrama de secuencias las posibles alternativas de un usuario logeado intentando ver un itinerario compartido (con o sin autorización) e involucra el sistema de autorización en sí mismo.
 
+**Leyenda:** cada columna es un participante (Viajero dueño, Amigo solicitante, Cliente, Servidor y Base de datos) y el tiempo avanza hacia abajo. Flecha continua: request. Flecha punteada: respuesta. Los bloques `alt` muestran los caminos alternativos: sin autorización o con permisos, y dentro de ellos, aceptar o rechazar. La región resaltada es la decisión del dueño del itinerario.
+
 ### ADRs generados
 
-- ADR12 - Encriptación HTTPS
-- ADR13 - Detección de Viajero no habilitados a ver itinerario
-- ADR14 - Autenticación de Viajero
-- ADR15 - Solicitar autorización para conectar correo electrónico
+### ADRs generados
 
-
+- [ADR12 - TLS en tránsito y cifrado en reposo de secretos](../adr/12-EncriptarDatos.md)
+- [ADR13 - Autorización de itinerarios compartidos](../adr/13-InformarUsuario.md)
+- [ADR14 - Autenticación de Viajero](../adr/14-AutenticarUsuario.md)
+- [ADR15 - OAuth 2.0 para conectar correo electrónico](../adr/15-EmailsConOAuth.md)
+- [ADR16 - Tokens de vida corta y refresh](../adr/16-TokensVidaCorta.md)
 
 ## PASO 7 - Revisar la aplicación del método
 
 En esta iteración, se abordaron las qa08 y qa09 referidas al escenario de seguridad, y la qa15 refererida al escenario de interoperabilidad. Tratamos de dar un soporte seguro y de confianza al usuario que se adentra en los servicios del sistema, siendo transparentes con las decisiones. En estos casos, el usuario toma un rol participativo, con lo cual se requiere la interacción entre la capa de cliente y la capa de servidor. Para próximas iteraciones, queda pendiente la parte de presentación.
+
+# Contraste LLM - Iteración 4 (Fuera del método)
+El LLM agregó otros QA y US que no atacó directamente, pero los usó para contextualizar sus elecciones.
+
+El LLM planteó estilos que creemos que agrega complejidad a la solución que se puede realizar aplicando tácticas. Ports&Adapters ya está implementado de la iteración 2, y el filtro de seguridad es lo que logramos aplicando las tácticas.
+
+Autenticar con tokens de vida corta para tener el servidor stateless para que el load balancer funcione tiene sentido, será agregado. En cada request, el cliente debe enviar la firma y vigencia del token
+
+La táctica de limitar la exposicion de los itinerarios compartidos nosotros lo clasificamos dentro de "informar al usuario del posible intruso" y en la asignación de responsabilidades se aclaró que este mecanismo notificará la usuario si quiere o no dar permisos.
+
+Adherirse a estándares es un nombre mas claro a la táctica de usar OAuth 2.0
+
+
+
+Agregar:
+(ADR12 DE LLM) - Authenticate actors con tokens firmados de vida corta y refresh (sin estado en el servidor)
+(ADR14 DEL LLM, fusionar con el ADR15 nuestro)

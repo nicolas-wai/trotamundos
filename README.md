@@ -7,6 +7,13 @@ Una vez sentadas las bases, corresponde tomar los drivers bien refinados, priori
 
 Por ultimo, nos toca aplicar el diseño generado en la round a un prototipo real. Esta implementación inicial permite ver qué tan buenas fueron las decisiones arquitectónicas tomadas.
 
+| Documento | Descripción |
+| --------- | ----------- |
+| [Drivers arquitectónicos](docs/01-drivers/ArchitecturalDrivers.md) | Propósito de la ronda, user stories, escenarios de calidad, constraints, concerns, utility tree y priorización |
+| [Diagrama de contexto](docs/01-drivers/contexto.md) | Límites del sistema |
+| [Método ADD](docs/02-add/ADD.md) | Descripción de los pasos del método usados en cada iteración |
+| [Enunciado resumido](docs/00-enunciados-resumenes/resumen-enunciado.md) | Resumen del enunciado de la cátedra |
+
 ## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
 
@@ -28,13 +35,24 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 
 ### Iteraciones realizadas
 
-| Iteración | Foco | Drivers abordados | ADRs |
-| --------- | ---- | ----------------- | ---- |
-| 1 | Estructura general | US01, C1, QA13 | 01, 02 |
-| 2 | Integraciones externas | US01, QA01, QA04, QA14, QA15 | 03 a 07 |
-| 3 | Escalabilidad y persistencia | QA05, QA06, QA07 | 08 a 11 |
-| 4 | Seguridad | QA08, QA09, QA15 | 12 a 16 |
-| 5 | Presentación | QA02, QA03, QA11 | 17 a 20 |
+| Iteración | Foco | Drivers abordados | ADRs | Documento | Contraste LLM |
+| --------- | ---- | ----------------- | ---- | --------- | ------------- |
+| 1 | Estructura general | US01, C1, QA13 | [01](docs/adr/01-ArquitecturaBase.md), [02](docs/adr/02-OrgInternaServidor.md) | [iteracion-1](docs/02-add/iteracion-1.md) | no aplica |
+| 2 | Integraciones externas | US01, QA01, QA04, QA14, QA15 | [03](docs/adr/03-PubSub.md), [04](docs/adr/04-ColaMensajesP2P.md), [05](docs/adr/05-PortsAdapters.md), [06](docs/adr/06-NormalizarEnBroker.md), [07](docs/adr/07-CircuitBreaker.md) | [iteracion-2](docs/02-add/iteracion-2.md) | [iteracion-2-llm](docs/anexo-llm/iteracion-2-llm.md) |
+| 3 | Escalabilidad y persistencia | QA05, QA06, QA07 | [08](docs/adr/08-LoadBalancer.md), [09](docs/adr/09-ColaPrioridad.md), [10](docs/adr/10-DBRelacionalCache.md), [11](docs/adr/11-ShardingDBporViajero.md) | [iteracion-3](docs/02-add/iteracion-3.md) | [iteracion-3-llm](docs/anexo-llm/iteracion-3-llm.md) |
+| 4 | Seguridad | QA08, QA09, QA15 | [12](docs/adr/12-EncriptarDatos.md), [13](docs/adr/13-InformarUsuario.md), [14](docs/adr/14-AutenticarUsuario.md), [15](docs/adr/15-EmailsConOAuth.md), [16](docs/adr/16-TokensVidaCorta.md) | [iteracion-4](docs/02-add/iteracion-4.md) | [iteracion-4-llm](docs/anexo-llm/iteracion-4-llm.md) |
+| 5 | Presentación | QA02, QA03, QA11 | [17](docs/adr/17-PayloadReducido.md), [18](docs/adr/18-ReflejoAutomatico.md), [19](docs/adr/19-PersonalizacionLocalStorage.md), [20](docs/adr/20-SSR.md) | [iteracion-5](docs/02-add/iteracion-5.md) | [iteracion-5-llm](docs/anexo-llm/iteracion-5-llm.md) |
+### Vistas arquitectónicas
+
+| Vista | Tipo | Ubicación |
+| ----- | ---- | --------- |
+| Contexto | Contexto | [contexto.md](docs/01-drivers/contexto.md) |
+| Descomposición y arquitectura general | Módulos y C&C | [iteracion-1, paso 6](docs/02-add/iteracion-1.md#paso-6---documentación) |
+| Integraciones externas | C&C y secuencia | [iteracion-2, paso 6](docs/02-add/iteracion-2.md#paso-6---documentación) |
+| Escalabilidad y persistencia | Módulos y C&C | [iteracion-3, paso 6](docs/02-add/iteracion-3.md#paso-6---documentación) |
+| Seguridad | Módulos y 2 secuencias | [iteracion-4, paso 6](docs/02-add/iteracion-4.md#paso-6---documentación) |
+| Presentación | Módulos, C&C y secuencia | [iteracion-5, paso 6](docs/02-add/iteracion-5.md#paso-6---documentación) |
+| Deployment | Asignación | [deployment.md](docs/03-vistas/deployment.md) |
 
 ### Pendientes
 
@@ -56,9 +74,8 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 ### Riesgos identificados
 Los riesgos que quedaron sin definir hay que explicitarlos. Se deben revisar frente al prototipo funcionando.
 
-- El sharding por idViajero choca con los itinerarios compartidos
-- El sharding por idViajero choca con la analitica (cruce de viajeros)
-- Starving de escritura por la cola de prioridad
-- Rollback cuando un cliente ya vio un cambio que no persistió
-- Sin revocación inmediata del access token
-- Puntos unicos de falla (cola/load balancer)
+- Las consultas cruzadas entre viajeros (itinerarios compartidos, analítica) frente al particionado por idViajero ([ADR11](docs/adr/11-ShardingDBporViajero.md))
+- Starving de escritura por la cola de prioridad ([ADR09](docs/adr/09-ColaPrioridad.md))
+- Rollback cuando un cliente ya vio un cambio que no persistió ([ADR18](docs/adr/18-ReflejoAutomatico.md))
+- Sin revocación inmediata del access token ([ADR16](docs/adr/16-TokensVidaCorta.md))
+- Puntos únicos de falla: balanceador, cola, primaria

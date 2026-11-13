@@ -71,64 +71,65 @@ graph TD
         J ---- H((Gestión de perfiles de usuario))
 
 ```
+**Leyenda:** cada círculo es un módulo del sistema. Una línea indica "contiene a" (descomposición), el módulo de arriba contiene al de abajo. El asterisco marca la funcionalidad secundaria (sistema de recomendación), prevista para la segunda entrega.
 
 **Vista estructural (C&C)** - Componentes involucrados en el renderizado y presentación:
+
 ```mermaid
 flowchart TD
-    subgraph Client ["Cliente Web (Navegador)"]
-        subgraph UI_Layer ["Capa de Interfaz de Usuario"]
-            View["Vistas Renderizadas (DOM)"]
-            ClientRuntime["Lógica de Cliente Minimal<br/>(Maintain User Model)"]
-        end
-
-        OptState["Gestor de Estado Optimista<br/>(en memoria)"]
-        PrefMgr["Gestor de Preferencias"]
-        LocalStorage[("LocalStorage / Cookies<br/>(Preferencias UI: Modo, Orden)")]
-
+    subgraph Client ["Navegador del viajero"]
+        View["Vista renderizada en el DOM"]
+        ClientRuntime["Runtime de cliente minimal"]
+        OptState["Gestor de estado optimista en memoria"]
+        PrefMgr["Gestor de preferencias"]
+        LocalStorage@{ shape: cyl, label: "LocalStorage del navegador" }
     end
 
-    subgraph WebServer ["Servidor Web (Stateless)"]
-        SSREngine["Módulo SSR"]
-        AuthMiddleware["Módulo Autenticación<br/>(Validación Token Firmado)"]
-        APIEndpoints["Controladores API / Endpoints"]
+    subgraph WebServer ["Instancia del servidor web stateless"]
+        SSREngine["Renderizador SSR"]
+        AuthMiddleware["Validador de token firmado"]
+        APIEndpoints["Controladores de la API"]
     end
 
-    subgraph CoreSystem ["Sistema Core"]
-        CoreBackend[("Backend Core & Persistencia<br/>(Consistencia Eventual)")]
-    end
+    CoreBackend@{ shape: cyl, label: "Backend core y persistencia con consistencia eventual" }
 
-    %% --- CONECTORES Y FLUJOS DE DATOS ---
+    View -->|"HTTPS GET dashboard"| SSREngine
+    SSREngine -->|"HTML con datos críticos"| View
 
-    %% Renderizado Inicial (SSR)
-    View -->|"HTTPS GET /dashboard"| SSREngine
-    SSREngine -->|"HTML + Datos Críticos Esenciales"| View
+    ClientRuntime -->|"aplica orden y tema"| PrefMgr
+    PrefMgr <-->|"lectura y escritura sincrónica vía Web Storage"| LocalStorage
+    PrefMgr -.->|"modifica el DOM"| View
 
-    %% Manejo de Preferencias Locales
-    ClientRuntime -->|"Aplica orden/tema"| PrefMgr
-    PrefMgr <-->|"Lectura/Escritura sincrónica (Web Storage API)"| LocalStorage
-    PrefMgr -.->|"Modifica DOM (UI Amigable)"| View
+    View -->|"eventos de crear y editar"| ClientRuntime
+    ClientRuntime -->|"actualización local inmediata"| OptState
+    OptState -->|"renderizado instantáneo"| View
 
-    %% Actualizaciones Optimistas (Creación/Edición Manual)
-    View -->|"Eventos de usuario (Crear/Editar)"| ClientRuntime
-    ClientRuntime -->|"Actualización local inmediata"| OptState
-    OptState -->|"Renderizado instantáneo"| View
+    ClientRuntime -->|"HTTPS POST o PUT con Bearer token"| AuthMiddleware
+    View -->|"HTTPS GET detalles con Bearer token"| AuthMiddleware
 
-    ClientRuntime -->|"HTTPS POST/PUT + Bearer Token Firmado"| AuthMiddleware
+    AuthMiddleware -->|"llamada interna"| APIEndpoints
+    APIEndpoints -->|"consulta o escritura"| CoreBackend
 
-    %% Obtención de Datos Detallados (Recarga Parcial)
-    View -->|"HTTPS GET /detalles + Bearer Token Firmado"| AuthMiddleware
-
-    %% Procesamiento Server
-    AuthMiddleware --> APIEndpoints
-    APIEndpoints --> CoreBackend
+    classDef core fill:#0000ff,color:#ffffff
+    class View,ClientRuntime,OptState,PrefMgr,LocalStorage,SSREngine,AuthMiddleware,APIEndpoints,CoreBackend core
 ```
+
+**Leyenda:**
+- Cajas azules: componentes en ejecución.
+- Cilindros: almacenes de datos.
+- Recuadro "Navegador del viajero": componentes que corren en el dispositivo.
+- Recuadro "Instancia del servidor web": componentes que corren en cada instancia del servidor.
+- Línea continua con flecha: request, response o llamada.
+- Línea de doble sentido: lectura y escritura.
+- Línea punteada: efecto sobre el DOM.
+
 
 **Vista comportamental (Secuencia)** - Flujo de datos entre el cliente y servidor:
 
 ```mermaid
 sequenceDiagram
     actor U as Viajero
-    
+
     box Cliente (Navegador)
         participant UI as Vista / DOM
         participant CR as Runtime Cliente
@@ -184,20 +185,21 @@ sequenceDiagram
         CR->>UI: Eliminar cambio de la vista y renderizar estado previo
         UI-->>U: Mostrar notificación: "No se pudo sincronizar el cambio. Reintentando..."
     end
-    
+
 
 ```
 En esta vista mostramos la carga inicial del sitio sumado al camino crítico de modificar/crear una reserva manualmente. Por último se muestran algunos elementos de cómo implementar la actualización optimista y posibles soluciones a rollbacks por fallo de esta.
+
+**Leyenda:** cada columna es un participante y el tiempo avanza hacia abajo. Las cajas agrupan los participantes del navegador (Vista, Runtime de cliente, LocalStorage) y los del servidor (Servidor web SSR y Backend core). Flecha continua: request o llamada. Flecha punteada: respuesta. Las notas separan los dos escenarios (carga inicial y alta manual con actualización optimista). El bloque `alt` distingue el caso exitoso del caso de fallo con rollback.
 
 ### ADRs generados
 
 Las decisiones de esta iteración se documentan en los siguientes Registros:
 
-- ADR20 - Uso de Server Side Rendering
-- ADR17 - Payload reducido en la interfaz
-- ADR18 - Reflejar actualizaciones manuales
-- ADR19 - Personalizacion en LocalStorage
-- ADR20 - Renderizado SSR
+- [ADR17 - Payload reducido en la interfaz](../adr/17-PayloadReducido.md)
+- [ADR18 - Reflejar actualizaciones manuales](../adr/18-ReflejoAutomatico.md)
+- [ADR19 - Personalización en LocalStorage](../adr/19-PersonalizacionLocalStorage.md)
+- [ADR20 - Renderizado SSR](../adr/20-SSR.md)
 
 ## PASO 7 - Revisar la aplicación del método
 
@@ -206,3 +208,20 @@ Se refinó el módulo de presentación para cliente web, asegurando la compatibi
 Queda pendiente definir como tratar rollbacks si falla en red o backend (El cliente ya vió su cambio, pero no persistió).
 
 El diseño actual ya aborda los drivers prioritarios de negocio, consideramos que no son necesarias más iteraciones para descomponer, podría realizarse una iteración extra para definir puntos sueltos centrados en elementos específicos.
+
+# Contraste LLM - Iteración 5 (Fuera del método)
+
+El objetivo de la iteración y la justificación de atacarla se consideraron en ambos casos, aunque el LLM hizo una mayor separación entre los clientes web y móvil.
+
+El LLM aplicó estilos que nosotros consideramos innecesarios, creemos que agrega más complejidad a la arquitectura de lo que aporta.
+
+Sobre las tácticas, se apuntó a lo mismo, reducir el volumen de la respuesta, mostrar las actualizaciones en local aunque no estén aún en el backend. El LLM sugirió "Modelo de tarea centrado en el viaje", nosotros tomamos eso como diseño de interfaz, no como algo arquitectónico.
+
+Además, prefirió tener una copia del resumen como cookie, creemos que eso podría interferir en la seguridad de los itinerarios de los usuarios, por lo que preferimos no tener una caché del usuario
+
+Para la tecnología a tratar clientes, el LLM optó por diseñar un cliente móvil multiplataforma y un SPA para el cliente web. Por conocimientos previos del equipo a arquitecturas orientadas al SSR, se prefirió esta opción, que a su vez tiene una carga inicial mejor que un SPA
+
+Ambos consideramos el riesgo de hacer rollback y cómo mostrarlo al cliente en ese caso
+
+En este caso, creemos que nuestras decisiones bastan para abordar la iteración correctamente. No tomamos nuevos ADRs.
+

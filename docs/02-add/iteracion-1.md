@@ -121,8 +121,8 @@ En esta vista estática se muestra claramente la división de lógica entre clie
 
 ### ADRs generados
 Las decisiones de esta iteración se documentan en los siguientes Registros:
-- ADR01 - Elección de arquitectura general (client-server)
-- ADR02 - Elección de estilos internos para el servidor (monolito modular)
+- [ADR01 - Elección de arquitectura general (client-server)](../adr/01-ArquitecturaBase.md)
+- [ADR02 - Elección de estilos internos para el servidor (monolito modular)](../adr/02-OrgInternaServidor.md)
 
 
 ## PASO 7 - Revisar la aplicación del método

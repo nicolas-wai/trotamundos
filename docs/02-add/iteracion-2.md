@@ -22,8 +22,8 @@ Hay que refinar es el módulo Integraciones externas. Actualmente, es el modulo 
 | Alternativa | Pros | Contras | Drivers relacionados
 |---|---|---|---|
 | Ports and Adapters | Independencia de la tecnología, modificabilidad, interoperabilidad | Complejidad de diseño (muchas abstracciones e indirecciones) | QA14, QA15
-| Pub-Sub | Bajo acoplamiento, notificación a varios consumidores | Pérdida de consistencia, baja trazabilidad, buffer como punto único de falla. Con un solo consumidor no aporta nada | QA01, QA04 (Negativo) 
-| Cola de mensajes punto a punto | Desacopla productor y consumidor | Agrega un componente y consistencia eventual (Asincronismo) | QA01 | 
+| Pub-Sub | Bajo acoplamiento, notificación a varios consumidores | Pérdida de consistencia, baja trazabilidad, buffer como punto único de falla. Con un solo consumidor no aporta nada | QA01, QA04 (Negativo)
+| Cola de mensajes punto a punto | Desacopla productor y consumidor | Agrega un componente y consistencia eventual (Asincronismo) | QA01 |
 | Pipes and filters  | Modular y modificable, reultilización, bajo acoplamiento | Bajo rendimiento (overhead latencia), degrada la interactividad con el usuario | QA14, QA15, QA01(negativo)
 
 ### 4.1 - Presentación y tolerancia a fallo
@@ -44,48 +44,46 @@ En el módulo del puerto se incluye un middleware que recibe las actualizaciones
 
 ```mermaid
 flowchart LR
-
-    subgraph SRV ["Servidor monolito modular / Sistema propio"]
-        subgraph INT ["Módulo Integraciones (Ports & Adapters)"]
-            AD_EMAIL@{ shape: stadium, label: "Adapter Email" }
-            AD_AGENCY@{ shape: stadium, label: "Adapter Agencias" }
-            AD_TRAVEL@{ shape: stadium, label: "Adapter Viajes" }
-            PORT["Puerto Único de Proveedores"]
-        end
-            QUEUE["Cola de Mensajes"]
-        subgraph CORE ["Lógica Central"]
-            VIA["Arreglos de viaje"]
-        end
-    end
     subgraph EXT_SYS ["Sistemas externos"]
-        EXT_EMAIL["Proveedor de Email"]
+        EXT_EMAIL["Proveedor de email"]
         EXT_AGENCY["Agencias"]
-        EXT_TRAVEL["Sistemas de Viajes"]
+        EXT_TRAVEL["Sistemas de viajes"]
     end
 
-    %% Relaciones externas hacia los adaptadores
-    EXT_EMAIL <-->|"revisa/devuelve actualizaciones"| AD_EMAIL
-    EXT_AGENCY <-->|"revisa/devuelve actualizaciones"| AD_AGENCY
-    EXT_TRAVEL <-->|"revisa/devuelve actualizaciones"| AD_TRAVEL
+    subgraph PROC ["Proceso del servidor"]
+        AD_EMAIL@{ shape: stadium, label: "Adapter Email" }
+        AD_AGENCY@{ shape: stadium, label: "Adapter Agencias" }
+        AD_TRAVEL@{ shape: stadium, label: "Adapter Viajes" }
+        PORT["Puerto único de proveedores"]
+        MW["Middleware de actualizaciones"]
+        VIA["Consumidor de arreglos de viaje"]
+    end
 
-    %% Relaciones internas de Ports & Adapters y la Cola
-    AD_EMAIL --> PORT
-    AD_AGENCY --> PORT
-    AD_TRAVEL --> PORT
-    PORT -->|"coloca actualizaciones"| QUEUE
-    QUEUE -->|"consume de forma asíncrona"| VIA
+    QUEUE[["Cola de mensajes punto a punto"]]
 
-    %% Estilos aplicados
+    EXT_EMAIL <-->|"HTTPS polling"| AD_EMAIL
+    EXT_AGENCY <-->|"HTTPS polling"| AD_AGENCY
+    EXT_TRAVEL <-->|"HTTPS polling"| AD_TRAVEL
+
+    AD_EMAIL -->|"llamada interna"| PORT
+    AD_AGENCY -->|"llamada interna"| PORT
+    AD_TRAVEL -->|"llamada interna"| PORT
+    PORT -->|"llamada interna"| MW
+    MW -->|"enqueue asíncrono"| QUEUE
+    QUEUE -->|"dequeue asíncrono"| VIA
+
     classDef core fill:#0000ff,color:#ffffff
     classDef external fill:#ffff00,color:#000000
-
-    class ADPTR,AD_EMAIL,AD_AGENCY,AD_TRAVEL,PORT,QUEUE,VIA core
+    class AD_EMAIL,AD_AGENCY,AD_TRAVEL,PORT,MW,VIA,QUEUE core
     class EXT_EMAIL,EXT_AGENCY,EXT_TRAVEL external
 ```
 
-- Amarillo: Sistemas externos
-- Rectángulos azules: Módulos del sistema
-- Píldoras azules: Adaptadores de puertos de nuestro sistema
+**Leyenda (vista C&C):**
+- Cajas azules: componentes del sistema en ejecución.
+- Píldoras azules: adapters, un componente por tipo de proveedor.
+- Caja con doble borde: cola de mensajes, componente de infraestructura.
+- Cajas amarillas: sistemas externos.
+- Flechas: se rotulan con el tipo de conector. "HTTPS polling" es una consulta periódica de ida y vuelta, "llamada interna" es una invocación dentro del proceso, y "enqueue" y "dequeue" son mensajes asíncronos.
 
 La vista busca mostrar los módulos involucrados en la implementación de "ports and adapters" y "cola asíncrona" dentro del servidor.
 
@@ -156,10 +154,35 @@ En este diagrama buscamos dar una vista dinámica del consumo de servicios exter
 
 ### ADRs generados
 Las decisiones de esta iteración se documentan en los siguientes Registros:
-- ADR03 - Uso de Publisher-Subscriber (rechazado)
-- ADR04 - Uso de "cola asincrona punto a punto" para actualizaciones
-- ADR05 - Uso de estilo Ports & Adapters 
+- [ADR03 - Uso de Publisher-Subscriber (reemplazado por ADR04)](../adr/03-PubSub.md)
+- [ADR04 - Uso de "cola asíncrona punto a punto" para actualizaciones](../adr/04-ColaMensajesP2P.md)
+- [ADR05 - Uso de estilo Ports & Adapters](../adr/05-PortsAdapters.md)
+- [ADR06 - La normalización se hace en el Broker](../adr/06-NormalizarEnBroker.md)
+- [ADR07 - Circuit breaker con reintentos acotados](../adr/07-CircuitBreaker.md)
 
 ## PASO 7 - Revisar la aplicación del método
 
 Se refinó el módulo más crítico en performance e interoperabilidad con terceros. Se concentra toda la comunicación en este modulo, aislando el resto del sistema de los mismos. Falta definir con qué intervalo de tiempo hará las consultas el middleware para asegurar los tiempos requeridos por los escenarios. Consideramos que lo mas critico próximo es el ámbito de la escalabilidad del sistema.
+
+# Contraste LLM - Iteración 2 (Fuera del método)
+
+El paso 4 tuvo las mismas movilizacion que nos hicieron pensar durante la discusión sobre que estilos elegir
+- Fuentes externas a diferentes tiempos que nuestro sistema
+- Si se cae una fuente externa no debe caerse el dashboard
+- Los datos vienen en formatos distintos segun el proveedor
+
+La idea del estilo Publisher-Subscriber es la misma que tomamos nosotros. Desacoplar los 3ros con el dashboard. El LLM uso la palabra "broker" a lo que nosotros dijimos que es el middleware que hace requests a los 3ros y alimenta el bus, ademas de hacer la normalizacion de datos.
+
+El estilo service-based no lo consideramos como servicios aun al resto del componentes, aun no pensamos en el despliegue del sistema. Pero la idea de abstract common services nosotros la imaginamos dentro de el estilo ports&adapters, donde cada proovedor está detras de una interfaz comun, evitando que toquen al logica.
+
+La tactica circuit breaker se puede adaptar con un timer, ante una falla de un proveedor se prueba con tiempos incrementales, si tras varios errores sigue fallando el proveedor se informa al usuario que no se puede establecer la conexion con ese proveedor.
+
+La tactica detect and recover, habla sobre el disponibilidad en despliegue, que aun no había sido considerada por el grupo.
+
+Los riegos que indica el LLM son correctos, el correo se debe sondear en intervalos cortos para asegurar los 5 minutos de tope final (El LLM sugiere 2 minutos como maximo). EL dashbord puede tener retraso con los datos en los distintos proveedores, pero el QA pide que se mantenga actualizado con 5 minutos, ya está contemplado. El broker reuqiere redundancia para que no caiga la principal funcionalidad del sistema.
+
+Las vistas del LLM, especialmente V1 intenta mostrar todo el sistema en una misma, nosotros optamos por vistas mas reducidas en el objetivo de la iteración
+
+DECISIONES A INCORPORAR:
+ADR-004, ADR-005
+Las ADRs sobre deployment se excluyen de esta iteración, no era el foco principal de esta iteracion.

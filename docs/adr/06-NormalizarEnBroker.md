@@ -20,7 +20,7 @@ Como se describe en ADR05, los proveedores pueden dar las actualizaciones de los
 ## Opciones Consideradas
 
 - Normalizar dentro del broker (Antes llamado middleware)
-- Normalizar a la salida del buffer (Ver ADR04-PubSub)
+- Normalizar a la salida del buffer (Ver ADR03-PubSub)
 
 ## Resultado de la decisión
 

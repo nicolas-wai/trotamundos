@@ -1,5 +1,5 @@
 ---
-estado: aceptado
+estado: aceptada
 fecha: 2026-10-28
 fuente: Grupo
 ---
