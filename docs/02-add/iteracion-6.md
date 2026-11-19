@@ -34,8 +34,8 @@ El módulo de base de datos se despliega aparte con una instancia de redundancia
 La cola de prioridades (ADR09) se despliega como nodo intermedio entre la lógica y los datos. En ese midmo nodo, se implementan el healthcheck de la base de datos.
 
 ### 5.2 - Healthchecks
-El load Balancer de los monolitos se encarga de monitorear los heartbeats producidos por las replicas. Los mismos se setean a una frecuencia menor a un minuto para garantizar la detección de fallo pedida en QA04. Ante una caida, solo se redistribuye la carga a las demás réplicas hasta recuperar la caída (responsabilidad del clúster).
-El nodo de la cola de prioridad monitorea heartbeats de la BD y ante un fallo redirije el tráfico a la réplica pasiva hasta recibir pulsos nuevamente.
+El load Balancer de los monolitos se encarga de monitorear los heartbeats producidos por las replicas. Los mismos se setean a una frecuencia menor a un minuto para garantizar la detección de fallo pedida en QA04. Ante una caida, solo se redistribuye la carga a las demás réplicas hasta recuperar la caída (responsabilidad del clúster).  
+El nodo de la cola de prioridad monitorea heartbeats de los nodos de datos y ante un fallo del entonces considerado primario, se intercambian responsabilidades mutuamente.
 
 ## PASO 6 - Documentación
 
@@ -68,7 +68,7 @@ graph TD
 
     %% Nodo Intermedio (Cola + Monitor de BD - ADR09)
     subgraph Capa_Intermedia [Nodo Intermedio]
-        Queue[Cola de Prioridades & Health Monitor BD]:::queue
+        Queue[Cola de Prioridades &<br/>Health Monitor BD]:::queue
     end
 
     %% Flujos Principales de Datos / Peticiones (Líneas Sólidas)
@@ -82,21 +82,19 @@ graph TD
     BackendN -->|Envío de solicitudes| Queue
     
     %% Flujos de Operaciones (Tráfico Normal al Nodo Primario)
-    Queue -->|"Tráfico Normal"| DB_Primary
+    Queue <-->|"Tráfico"| DB_Primary
     
     %% Nodos BD
     DB_Primary["Nodo Primario de datos"]:::db
     DB_Spare["BD - Redundancia pasiva"]:::db
     
     DB_Primary -.->|"Heartbeat"| Queue
-    
-    %% Conmutación (Failover) y Sincronización Inter-Nodo
-    Queue -.->|"Failover por Caída"| DB_Spare
+    DB_Spare -.->|"Heartbeat"| Queue
     
     DB_Primary ==>|"Sincronización Periódica de Estado"| DB_Spare
 ```
 
-donde "Nodo primario de datos" y su redundancia pasiva son réplicas del nodo definido en iteración 3:
+Donde "Nodo primario de datos" y su redundancia pasiva son réplicas del nodo definido en iteración 3:
 ```mermaid
 flowchart TD
 
@@ -119,6 +117,8 @@ Cache -.->|"Cache Miss"| DB_Replica
 %% Línea doble (Replicación)
 DB_Primary ==>|"Replicación de Datos"| DB_Replica
 ```
+
+Este esquema describe el despliegue de los diferentes módulos del sistema en cualquier instante de tiempo. Ante una caída de nodo de datos o un mal funcionamiento (detectado en respuesta a consultas), el monitor efectúa un switch: el nodo spare pasa a ser primario mientras se mantenga saludable y se intercambian responsabilidades mutuamente (siguen respetando lo descrito en la vista).
 
 ### ADRs generados
 Las decisiones de esta iteración se documentan en los siguientes Registros:

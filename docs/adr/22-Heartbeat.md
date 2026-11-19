@@ -1,65 +1,57 @@
 ---
-estado: "{propuesta | rechazada | aceptada | obsoleta | reemplazada por ADR-0123}"
-fecha: { YYYY-MM-DD de la ultima actualización }
-fuente: { Grupo | LLM }
+estado: aceptada
+fecha: 2026-11-19
+fuente: Grupo
 ---
 
-# Titulo corto, representativo del problema solucionado y la solucion encontrada
+# Healthchecks para réplicas del backend y base de datos
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
+Con el patrón de despliegue definido en el [ADR21](./21-Deployment.md), el sistema necesita detectar cuándo un nodo cae para redistribuir la carga o conmutar a la instancia pasiva. Sin un mecanismo de detección, la redundancia no alcanza para cumplir [QA04](../01-drivers/ArchitecturalDrivers.md#escenarios-de-atributos-de-calidad).
+
+El alcance del problema es el monitoreo de salud entre el balanceador y las réplicas del monolito modular, y entre el nodo de la cola de prioridades y la base de datos.
 
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- QA04 - Inactividad no planificada
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Heartbeat
+- Ping/echo
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
+Opción elegida: Heartbeat, porque permite controlar el tiempo de detección de una caída mediante la configuración del timeout de forma centralizada y alivia el uso de red frente a ping/echo, al generar tráfico adicional en una sola dirección.
 
-<!-- This is an optional element. Feel free to remove. -->
+Se decidió aplicarlo en ambos puntos:
+
+- **Backend:** el balanceador de carga monitorea los heartbeats producidos por las réplicas. La frecuencia de pulsos y la tolerancia a heartbeats perdidos se configura de manera tal que garantice detectar una caída real por debajo del minuto, respentando medida de respuesta en [QA04](../01-drivers/ArchitecturalDrivers.md#escenarios-de-atributos-de-calidad). Ante una caída, solo se redistribuye la carga a las demás réplicas hasta que la caída se recupere (recuperación es responsabilidad del clúster).
+- **Datos:** el nodo de la cola de prioridades monitorea los heartbeats de ambas réplicas de nodo de datos. Ante un fallo, redirige el tráfico a la instancia de redundancia pasiva, convirtiéndose esta en primaria y activando ella misma un heartbeat y sincronizaciones. A esto le llamamos intercambio de responsabilidades. La réplica principal, entonces, pasa a considerarse pasiva.
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque el tiempo de detección se controla de forma centralizada con el timeout del balanceador.
+- Bueno, porque el tráfico es unidireccional y consume menos red que ping/echo.
+- Bueno, porque la réplica o la base de datos es proactiva al informar su estado.
+- Neutral, porque existe riesgo de saturación si no hay sincronización entre los heartbeats.
+- Neutral, porque el tiempo de reconocimiento de una caída es variable.
+- Neutral, hay que ajustar frecuencia y timeout para no declarar caído a un nodo ante una demora puntual.
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Para confirmar el cumplimiento de este ADR se debe verificar que:
+
+- Al apagar una réplica del backend, el balanceador la detecta en menos de un minuto y deja de enviarle tráfico, redistribuyéndolo entre las restantes.
+- Al cortar los heartbeats del nodo de datos primario, el nodo de la cola de prioridades redirige el tráfico a la instancia pasiva y la notifica del intercambio de responsabilidades. Posteriormente la nueva instancia primaria comienza a enviar sincronizaciones a la pasiva (una vez que pueda recibirlas)
+- Los tiempos medidos cumplen la medida de respuesta de QA04.
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Ping/echo
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
-
-### {title of other option}
-
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
+- Bueno, porque el control queda centralizado en el balanceador/cola.
+- Bueno, porque se integra fácilmente con el balanceador.
+- Malo, porque el tráfico es bidireccional.
+- Malo, porque es sensible a la latencia.
