@@ -1,65 +1,49 @@
 ---
-estado: "{propuesta | rechazada | aceptada | obsoleta | reemplazada por ADR-0123}"
-fecha: { YYYY-MM-DD de la ultima actualización }
-fuente: { Grupo | LLM }
+estado: aceptada
+fecha: 2026-11-20
+fuente: Grupo
 ---
 
-# Titulo corto, representativo del problema solucionado y la solucion encontrada
+# Asincronismo en la carga del panel recomendaciones del Dashboard
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
+Al incorporar el sistema de recomendaciones en el dashboard, surge una diferencia importante en los tiempos de respuesta: mientras que la carga principal de reservas debe resolverse rápidamente, la generación de recomendaciones requiere procesar el historial y las preferencias del viajero, pudiendo demorar hasta 3 segundos. Si el dashboard espera a que se generen las recomendaciones para mostrarse, el usuario percibirá lentitud al acceder a sus viajes, incumpliendo los tiempos de respuesta definidos para web y mobile.
 
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- US08 - Sistema de Recomendación
+- QA17 - Performance: Generación de recomendaciones
+- QA02 - Tiempo respuesta Web
+- QA03 - Primer contenido mobile
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Carga asíncrona del panel de recomendaciones en el Dashboard
+- Carga síncrona de las recomendaciones junto con el resto del Dashboard
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
-
-<!-- This is an optional element. Feel free to remove. -->
+Opción elegida: Carga asíncrona del panel de recomendaciones en el Dashboard, porque permite que el tiempo de generación de las recomendaciones no impacte en el flujo principal de carga. De esta manera el viajero puede ver sus reservas activas dentro de los tiempos esperados (QA02 y QA03) mientras el módulo de recomendaciones procesa y devuelve las sugerencias en un panel aparte dentro de su límite de 3 segundos (QA17).
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque la carga del dashboard no depende de las recomendaciones, que son más lentas que el resto de los elementos
+- Bueno, porque el usuario puede consultar sus reservas en todo momento aunque el modulo de recomendaciones falle o se demore
+- Malo, porque el usuario ve que una parte del dashboard ya cargó mientras el panel de recomendaciones todavía falta, genrando la necesidad de mostrar estados de carga en la interfaz
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Se deberá verificar durante la implementación y pruebas que el dashboard realice una petición independiente para el panel de recomendaciones, confirmando que las reservas se muestren en menos de 800ms en web y 1.4s en mobile sin quedar bloqueadas por la respuesta del módulo de recomendaciones.
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Carga asíncrona del panel de recomendaciones en el Dashboard
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
+- Bueno, porque mantiene los tiempos de respuesta del dashboard principal (QA02/QA03 Positivo) y respeta el límite de recomendaciones (QA17 Positivo)
+- Malo, porque genera una carga parcial visible en la pantalla y suma lógica en el cliente para manejar el estado de espera
 
-### {title of other option}
+### Carga síncrona de las recomendaciones junto con el resto del Dashboard
 
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
+- Bueno, porque simplifica la implementación inicial al mostrar toda la pantalla en un solo paso
+- Malo, porque el dashboard entero queda bloqueado esperando hasta 3 segundos por las recomendaciones (QA02/QA03 Negativo)
