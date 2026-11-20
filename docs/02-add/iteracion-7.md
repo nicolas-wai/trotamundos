@@ -1,13 +1,3 @@
-**US08 - Sistema de Recomendación**
-
-Como Viajero quiero que se me sugieran alternativas de alojamientos/transportes/rutas para conocer nuevas propuestas pensadas para mí.
-
-Criterios de Aceptación:
-
-- En base al análisis del historial y preferencias de los usuarios debe sugerir proactivamente alternativas de alojamiento, transporte o rutas.
-- Debe utilizar una optimización human-in-the-loop donde el usuario interactue con la sugerencia, aceptando o ajustando parámetros.
-- Debe refinar la recomendación en base a las interacciones del usuario.
-
 # Iteración 7 - Sistema de recomendacion
 
 ## PASO 1 - Revisar el input

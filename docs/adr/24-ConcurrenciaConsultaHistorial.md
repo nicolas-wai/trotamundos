@@ -1,65 +1,53 @@
 ---
-estado: "{propuesta | rechazada | aceptada | obsoleta | reemplazada por ADR-0123}"
-fecha: { YYYY-MM-DD de la ultima actualización }
-fuente: { Grupo | LLM }
+estado: aceptada
+fecha: 2026-11-20
+fuente: Grupo
 ---
 
-# Titulo corto, representativo del problema solucionado y la solucion encontrada
+# Concurrencia en la consulta del historial del usuario para el sistema de recomendación
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
+El sistema de recomendación requiere información del historial de arreglos del usuario para adaptar a sus gustos. Previamente, se definió un sistema de sharding por idViajero ([ADR11](11-ShardingDBporViajero.md)) y una cola de prioridad en las lecturas de la base de datos ([ADR09](09-ColaPrioridad.md)) que simplifica y agiliza la busqueda ya que las recomendaciones son en base al usuario que las solicita.
+
+Sin embargo, el historial se encuentra distribuido en distintas tablas, la forma en que se realizan las consultas son clave para tener un buen tiempo de generación
 
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- QA17 - Performance: Generacion de recomendaciones
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Consultas concurrentes
+- Consultas secuenciales
+- Mantener una unica estructura de datos con toda la informacion del historial
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
-
-<!-- This is an optional element. Feel free to remove. -->
+Opción elegida: Consultas concurrentes
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque reduce el tiempo de obtencion del historial
+- BUeno, porque se pueden centralizar luego los resultados para formar la informacion general
+- Bueno, porque aprovecha el sharding
+- Malo, porque incrementa la carga en la base de datos
+- Malo, porque un hilo de ejecución retrasa la entrega del resultado final
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Se debe verificar la implementacion mediante pruebas de rendimiento y concurrencia, ajustando el grado de concurrencia para no perder tiempos en el overhead. Tambien se debe verificar que la integracion entre los distintos historiales sea correcta
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Consultas secuenciales
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
+- Bueno, porque es sencillo de implementar y facilita el testing
+- Malo, porque perjudican el tiempo total de respuesta
 
-### {title of other option}
+## Estructura con informacion de los historiales
 
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
+- Bueno, porque toda la informacion ya se encuentra centralizada para la consulta
+- Bueno, porque reduce el numero de consultas y no sobrecarga la base de datos
+- Malo, porque requiere mantener actualizada la estructura en cada moficiacion del historial
+- Malo, porque puede llevar a inconsistencias que requiere un mayor costo de mantenimiento
