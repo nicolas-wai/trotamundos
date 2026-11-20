@@ -1,4 +1,4 @@
-# Iteración 7 - Sistema de recomendacion
+# Iteración 7 - Sistema de recomendación
 
 ## PASO 1 - Revisar el input
 
@@ -61,6 +61,81 @@ El modulo de recomendaciones posee una lista de arreglos provista por distintos 
 ## PASO 6 - Documentación
 
 ### Vistas
+
+**Descomposición del sistema (Diagrama de Módulos):**
+```mermaid
+graph TD
+    A((TROTAMUNDOS)) ---- B((Conexiones Externas))
+        B ---- BA((APIs Agencias))
+        B ---- BB((APIs Correo))
+
+    A --- C((Núcleo de Negocio))
+        C ---- D(("Dashboard (UI Viajero) "))
+            D ---- G((Presentación de reservas))
+                G --- GA((Cliente Web))
+                G --- GB((Cliente Móvil))
+            D ---- E((Importación manual))
+            D ---- F((Sistema de Recomendaciones))
+    C ---- J((Autenticación))
+        J ---- K((Control de Permisos))
+        J ---- H((Gestión de perfiles</br>de usuario))
+
+    %%Propio de esta iteración
+    style F stroke-width:4px
+    classDef destacado stroke:#40AA40, stroke-width:2px
+
+    F --- Collector(("Recolector (Concurrente)</br><hr>Historial & Perfil"))
+    F --- Engine(("Filtrado Basado en Contenido"))
+    F --- HITL(("Retroalimentación (HITL)</br><hr>Analyzer + Updater"))
+
+    class F,Collector,Engine,HITL destacado
+    linkStyle 13,14,15 stroke:#4A4,stroke-width:2px
+```
+
+
+Se añade al último diagrama de módulos la descomposición del `Sistema de Recomendaciones` y sus componentes. Se destacan en color verde los cambios.
+
+**Diagrama de Secuencia**
+
+```mermaid
+sequenceDiagram
+    actor Viajero
+    participant Dashboard
+    participant RecSys as Módulo Recomendaciones
+    participant Historial as Historial de Viajes
+    participant Perfil as Perfil y Preferencias
+
+    %% Carga asíncrona (ADR23)
+    Viajero->>Dashboard: Ingresa al dashboard
+    Dashboard-->>Viajero: Carga vista principal
+    Dashboard-)RecSys: Solicitar recomendaciones (Asíncrono)
+
+    %% Consultas concurrentes (ADR24)
+    par Recolección en paralelo (QA17 < 3s)
+        RecSys->>Historial: Consultar historial (alojamientos, rutas, transportes)
+        Historial-->>RecSys: Registros históricos
+    and
+        RecSys->>Perfil: Consultar preferencias guardadas
+        Perfil-->>RecSys: Parámetros y gustos
+    end
+
+    %% Filtrado basado en contenido (ADR25)
+    RecSys->>RecSys: Filtrar catálogo de proveedores por metadatos
+    RecSys--)Dashboard: Retornar alternativas personalizadas
+    Dashboard-->>Viajero: Mostrar panel de recomendaciones
+
+    %% Retroalimentación Human-in-the-Loop (QA18)
+    opt El viajero interactúa con las sugerencias (QA18)
+        Viajero->>Dashboard: Acepta, rechaza o ajusta parámetros
+        Dashboard->>RecSys: Enviar feedback de interacción
+        RecSys->>Perfil: Actualizar preferencias del viajero
+    end
+```
+> `Perfil y Preferencias` e `Historial de Viajes` pertenecen a la Base de Datos. NO son módulos ni almacences separados, solo se muestra en la vista una diferencia semántica.
+Flechas abiertas simbolizan mensajes de llamadas asíncronas.
+Líneas punteadas simbolizan retornos de llamadas.
+
+En esta última vista describimos el flujo básico del **Sistema de Recomendaciones**. Se muestra la interacción del viajero con el dashboard, de qué manera se procesan las recomendaciones y como le llegan. Finalmente, se muestra la opción de dar feedback para mejorar las recomendaciones en función de sus gustos (HITL).
 
 ### ADRs generados
 

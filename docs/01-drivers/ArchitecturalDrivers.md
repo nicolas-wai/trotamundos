@@ -273,6 +273,29 @@ El sistema debe interoperar con proveedores de redes sociales para compartir iti
 - Respuesta: Validación del servicio externo, conexión permanente establecida
 - Medida de respuesta: El usuario se valida en el servicio externo y queda sincronizado en el 70% de los casos.
 
+**QA17 - Performance: Generacion de recomendaciones**
+
+El sistema de recomendación debe generarlas en un tiempo apropiado
+
+- Fuente: Viajero con historial
+- Estimulo: Solicituda de recomandacion al cargar el dashboard
+- Artefacto: Modulo de recomendaciones, historial
+- Enterno: Tiempo de ejecucion, en modo normal
+- Respuesta: El sistema devuelve en el dashboard las alternativas personalizadas de alojamiento, transporte y rutas
+- Medida de respuesta: El tiempo de generacion de respuestas maximo es de 3 segundos
+
+**QA18 - Evolvability: Retroalimentacion del usuario**
+
+El sistema de recomendacion debe utilizar una optimizacion human-in-the-loop para ajustar los parametros
+
+- Fuente: Viajero
+- Estimulo: Acepta, rechaza o ajusta parametros de una recomendacion
+- Artefacto: Modulo de recomendaciones, parametros y preferencias
+- Enterno: Funcionamiento normal, en ejecucion
+- Respuesta: El sistema utiliza el feedback del usuario para refinar futuras recomendaciones
+- Medida: El feedback debe usarse para la proxima recomendacion que se realice
+
+
 ## Constraints
 
 C1 - Los viajeros deben usar el sistema desde una web o un dispositivo móvil.
