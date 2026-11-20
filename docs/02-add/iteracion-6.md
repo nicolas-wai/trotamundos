@@ -34,7 +34,7 @@ El módulo de base de datos se despliega aparte con una instancia de redundancia
 La cola de prioridades (ADR09) se despliega como nodo intermedio entre la lógica y los datos. En ese midmo nodo, se implementan el healthcheck de la base de datos.
 
 ### 5.2 - Healthchecks
-El load Balancer de los monolitos se encarga de monitorear los heartbeats producidos por las replicas. Los mismos se setean a una frecuencia menor a un minuto para garantizar la detección de fallo pedida en QA04. Ante una caida, solo se redistribuye la carga a las demás réplicas hasta recuperar la caída (responsabilidad del clúster).  
+El load Balancer de los monolitos se encarga de monitorear los heartbeats producidos por las replicas. Los mismos se setean a una frecuencia menor a un minuto para garantizar la detección de fallo pedida en QA04. Ante una caida, solo se redistribuye la carga a las demás réplicas hasta recuperar la caída (responsabilidad del clúster).
 El nodo de la cola de prioridad monitorea heartbeats de los nodos de datos y ante un fallo del entonces considerado primario, se intercambian responsabilidades mutuamente.
 
 ## PASO 6 - Documentación
@@ -80,17 +80,17 @@ graph TD
     Backend1 -->|Envío de solicitudes| Queue
     Backend2 -->|Envío de solicitudes| Queue
     BackendN -->|Envío de solicitudes| Queue
-    
+
     %% Flujos de Operaciones (Tráfico Normal al Nodo Primario)
     Queue <-->|"Tráfico"| DB_Primary
-    
+
     %% Nodos BD
     DB_Primary["Nodo Primario de datos"]:::db
     DB_Spare["BD - Redundancia pasiva"]:::db
-    
+
     DB_Primary -.->|"Heartbeat"| Queue
     DB_Spare -.->|"Heartbeat"| Queue
-    
+
     DB_Primary ==>|"Sincronización Periódica de Estado"| DB_Spare
 ```
 
@@ -130,5 +130,9 @@ Las decisiones de esta iteración se documentan en los siguientes Registros:
 Se definió cómo serán desplegados los módulos del sistema y como se abordarán las revisiones de salud de cada uno. Todo en pos de eliminar incertidumbre y mejorar la disponibilidad en torno a las medidas de respuesta en QA04.
 
 
-# Contraste LLM 
-PENDIENTE
+# Contraste LLM
+El LLM optó por elegir replicas en idferentes zonas con dos nodos (lider-seguidor) para que uno acepte escrituras y el otro lo reemplace ante una caida.
+
+Como tacticas usó helathcheck con hearthbeat, degradacion controlada para permitir solo lectura si no se puede escribir y resincronizacion antes de reintroducir.
+
+Al igual que el grupo, se descartó spare frio por el arranque lento. 
