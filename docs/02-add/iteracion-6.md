@@ -5,13 +5,12 @@ Definir soluciones de disponibilidad para el sistema entero. Organizar el despli
 
 **Drivers a desarrollar en la iteración:**
 - QA04 - Inactividad no planificada
-
+- QA13 - Multiregión
 
 ## PASO 3 - Descomposición
 En iteraciones anteriores se tomaron decisiones que dejan cuestiones sin resolver acerca de como se garantiza la disponibilidad del sistema. Se despeja incertidumbre, por separado, sobre los módulos de lógica (backend) y datos.
 
 ## PASO 4 - Aplicando conceptos de diseño a los drivers seleccionados
-
 **Alternativas propuestas:**
 
 | Alternativa             | Pros                                               | Contras |
@@ -31,11 +30,14 @@ Para el health check del módulo de datos, se elige también heartbeat, en conju
 ### 5.1 - Patrón de despliegue
 Respetando la redundancia activa (n réplicas según disponibilidad geográfica) definida en ADR08 tiene un balanceo de carga para los monolitos modulares que contienen la lógica replicada del negocio.
 El módulo de base de datos se despliega aparte con una instancia de redundancia pasiva. La instancia primaria envía actualizaciones de forma periódica.
-La cola de prioridades (ADR09) se despliega como nodo intermedio entre la lógica y los datos. En ese midmo nodo, se implementan el healthcheck de la base de datos.
+La cola de prioridades (ADR09) se despliega como nodo intermedio entre la lógica y los datos. En ese mismo nodo, se implementa el healthcheck del módulo de datos.
+Por último, se considera insuficiente lo antes dicho para garantzar disponibilidad. Para resolver ambos drivers en conjunto, se decide replicar el sistema entero en cada región que se considere necesaria a lo largo del tiempo. Así, el balanceador de carga y la cola dejan de ser single point of failure para el mundo. Se delega a los DNS y demás servicios externos la tarea de balancear carga entre los distintos servidores distribuidos geográficamente.
 
 ### 5.2 - Healthchecks
 El load Balancer de los monolitos se encarga de monitorear los heartbeats producidos por las replicas. Los mismos se setean a una frecuencia menor a un minuto para garantizar la detección de fallo pedida en QA04. Ante una caida, solo se redistribuye la carga a las demás réplicas hasta recuperar la caída (responsabilidad del clúster).
 El nodo de la cola de prioridad monitorea heartbeats de los nodos de datos y ante un fallo del entonces considerado primario, se intercambian responsabilidades mutuamente.
+
+Ambos monitores de heartbeat controlan el timing con que sus instancias envían pulso, para evitar picos de procesamiento. Al cabo de 3 timeouts (beats perdidos) se considera un nodo caido. Todos los nodos se configuran a una frecuencia de pulsos de 10 segundos.
 
 ## PASO 6 - Documentación
 
@@ -46,9 +48,8 @@ El nodo de la cola de prioridad monitorea heartbeats de los nodos de datos y ant
 graph TD
     %% Estilos de Nodos
     classDef client stroke:#475569,stroke-width:2px;
-    classDef lb stroke:#1d4ed8,stroke-width:2px;
+    classDef middleware stroke:#a16207,stroke-width:2px;
     classDef backend stroke:#15803d,stroke-width:2px;
-    classDef queue stroke:#a16207,stroke-width:2px;
     classDef db stroke:#b91c1c,stroke-width:2px;
 
     %% Clientes externos
@@ -56,7 +57,7 @@ graph TD
 
     %% Nodo / Capa de Balanceo de Carga
     subgraph Capa_LB [Nodo de Balanceo de Carga]
-        LB[Load Balancer & Health Monitor]:::lb
+        LB[Load Balancer & Health Monitor]:::middleware
     end
 
     %% Capa de Backend (Redundancia Activa - ADR08)
@@ -68,7 +69,7 @@ graph TD
 
     %% Nodo Intermedio (Cola + Monitor de BD - ADR09)
     subgraph Capa_Intermedia [Nodo Intermedio]
-        Queue[Cola de Prioridades &<br/>Health Monitor BD]:::queue
+        Queue[Cola de Prioridades &<br/>Health Monitor BD]:::middleware
     end
 
     %% Flujos Principales de Datos / Peticiones (Líneas Sólidas)
@@ -93,8 +94,12 @@ graph TD
 
     DB_Primary ==>|"Sincronización Periódica de Estado"| DB_Spare
 ```
+> Rectángulo: módulo empaquetado del sistema (nodo desplegado)
+> Naranja: nodo de middleware
+> Verde: nodo backend (lógica del negocio)
+> Rojo: nodo de datos
 
-Donde "Nodo primario de datos" y su redundancia pasiva son réplicas del nodo definido en iteración 3:
+Donde `Nodo primario de datos` y su redundancia pasiva son réplicas del nodo definido en iteración 3:
 ```mermaid
 flowchart TD
 
@@ -135,4 +140,4 @@ El LLM optó por elegir replicas en idferentes zonas con dos nodos (lider-seguid
 
 Como tacticas usó helathcheck con hearthbeat, degradacion controlada para permitir solo lectura si no se puede escribir y resincronizacion antes de reintroducir.
 
-Al igual que el grupo, se descartó spare frio por el arranque lento. 
+Al igual que el grupo, se descartó spare frio por el arranque lento.
