@@ -1,65 +1,43 @@
 ---
-estado: "{propuesta | rechazada | aceptada | obsoleta | reemplazada por ADR-0123}"
-fecha: { YYYY-MM-DD de la ultima actualización }
-fuente: { Grupo | LLM }
+estado: aceptada
+fecha: 2026-11-20
+fuente: Grupo
 ---
 
-# Titulo corto, representativo del problema solucionado y la solucion encontrada
+# Recomendación basada en contenido
 
 ## Contexto y Problema
 
-{Describe el contexto y la formulación del problema, por ejemplo, en formato libre con dos o tres frases o en forma de historia ilustrativa. Quizás te interese plantear el problema en forma de pregunta. Plantéate añadir enlaces a tableros de colaboración o a sistemas de gestión de incidencias. Deja claro el alcance de la decisión, por ejemplo, destacando o señalando elementos de la arquitectura estructural (componentes, conectores, etc.).}
-
+El sistema de recomendaciones debe sugerir alternativas de alojamientos, transportes y rutas personalizadas para cada viajero a partir de su historial, sus preferencias y el feedback que brinde sobre sugerencias anteriores (human-in-the-loop).
 ## Decision Drivers
 
-- {decision driver 1}
-- {decision driver 2}
-- …
+- US08 - Sistema de Recomendación
+- QA17 - Performance: Generación de recomendaciones
+- QA18 - Evolvability: Retroalimentación del usuario
 
 ## Opciones Consideradas
 
-- {title of option 1}
-- {title of option 2}
-- {title of option 3}
-- …
+- Sistema de recomendación basado en contenido
+- Sistema de recomendación por filtrado colaborativo
 
 ## Resultado de la decisión
 
-Opción elegida: «{título de la opción 1}», porque {justificación. p. ej., es la única opción que cumple el criterio determinante para la decisión | que resuelve el problema {problema} | … | resulta ser la mejor (véase más abajo)}.
-
-<!-- This is an optional element. Feel free to remove. -->
+Opción elegida: Sistema de recomendación basado en contenido, porque no depende de la actividad de otros usuarios y resulta más simple de implementar para el prototipo. Al trabajar directamente con los metadatos de los arreglos provistos por los proveedores y las preferencias almacenadas en el perfil del viajero, permite incorporar de forma directa el feedback del usuario para refinar la próxima recomendación (QA18).
 
 ### Consecuencias
 
-- Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-- Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
+- Bueno, porque funciona sin necesidad de contar con un gran volumen de interacciones de otros usuarios
+- Bueno, porque facilita ajustar las recomendaciones inmediatamente a partir de las preferencias y el feedback del viajero
+- Malo, porque ofrece poca diversidad en las recomendaciones al enfocarse solo en elementos similares al historial previo
+- Malo, porque la calidad de las sugerencias depende directamente de que los metadatos provistos por los proveedores sean completos y precisos
 
 ### Confirmación
 
-{Describe cómo se puede confirmar o se confirmará la implementación o el cumplimiento de la ADR. ¿Existe alguna función de comprobación de idoneidad, ya sea automática o manual? En caso afirmativo, enumérala y explica cómo se aplica. ¿El diseño elegido y su implementación se ajustan a la decisión? Por ejemplo, una revisión del diseño o del código, o una prueba con una biblioteca como ArchUnit, puede ayudar a validarlo. Tenga en cuenta que, aunque clasificamos este elemento como opcional, se incluye en muchas ADR.}
+Se deberá verificar durante la implementación que el módulo de recomendaciones consuma los metadatos de la lista de arreglos de los proveedores junto con el historial y perfil de preferencias del viajero, y que al recibir una interacción del usuario (aceptacion, rechazo o ajuste de parametros), estos cambios se reflejen en la siguiente recomendacion generada.
 
 ## Pros y Cons de las opciones
 
-### {title of option 1}
+### Sistema de recomendación por filtrado colaborativo
 
-- Good, because {argument a}
-- Good, because {argument b}
-- Neutral, because {argument c}
-- Bad, because {argument d}
-- …
-
-### {title of other option}
-
-- Good, because {argument a}
-- Neutral, because {argument b}
-- Bad, because {argument c}
-- …
-
-<!-- This is an optional element. Feel free to remove. -->
-
-## Más información
-
-{Quizá te interese aportar aquí pruebas adicionales o justificar el resultado de la decisión, así como documentar el consenso del equipo respecto a la misma, definir cuándo y cómo debe llevarse a cabo y si debe revisarse y, en caso afirmativo, cuándo. También pueden aparecer aquí enlaces a otras decisiones y recursos.}
+- Bueno, porque descubre preferencias emergentes y ofrece mayor diversidad en las sugerencias
+- Malo, porque presenta el problema de cold start y requiere un gran volumen de actividad de otros usuarios para un buen funcionamiento

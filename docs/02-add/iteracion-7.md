@@ -72,6 +72,6 @@ Las decisiones de esta iteración se documentan en los siguientes Registros:
 
 ## PASO 7 - Revisar la aplicación del método
 
-La descomposición del sistema de recomendación y las alternativas planteadas fue suficiente para cumplir los atributos de calidad planteados.
+La descomposición del sistema de recomendación y las alternativas planteadas fue suficiente para cumplir los atributos de calidad planteados. 
 
 # Contraste LLM
