@@ -15,6 +15,7 @@ La pregunta es: ¿cómo desplegamos cada uno de estos módulos para que una caí
 ## Decision Drivers
 
 - QA04 - Inactividad no planificada
+- QA13 - Multiregión
 
 ## Opciones Consideradas
 
@@ -32,6 +33,8 @@ El patrón de despliegue queda así ([vista](../02-add/iteracion-6.md#vistas)):
 - El **balanceador de carga** se ubica en su propio nodo y reparte el tráfico entre esas n réplicas.
 - La **cola de prioridades** ([ADR09](./09-ColaPrioridad.md)) se despliega como nodo intermedio entre la lógica y los datos. En ese mismo nodo se implementa el healthcheck de la base de datos (ver [ADR22](./22-Heartbeat.md)).
 - El **módulo de datos** se despliega aparte: un nodo primario y una instancia de redundancia pasiva. Ambos son instancias del módulo de datos definido en la [iteración 3](../02-add/iteracion-3.md) (primaria, réplicas de lectura y caché). La instancia primaria envía actualizaciones de estado de forma periódica a la instancia pasiva.
+
+Esto se replica n veces según se considere en cada etapa de vida del sistema. Se despliega en diferentes ubicaciones geográficas y se delega el balanceo de carga a servidores DNS y asociados.
 
 ### Consecuencias
 
