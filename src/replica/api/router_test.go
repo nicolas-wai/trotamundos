@@ -1,63 +1,42 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"context"
-
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
-	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
-	recdomain "github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
+	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
-	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
-// unimplementedEmailLinking responde ErrNotImplemented: la vinculación real se prueba en src/region.
-type unimplementedEmailLinking struct{}
+// failingAuthentication es el único servicio que las pruebas de ruta pueden invocar (las rutas de autenticación son
+// públicas): siempre falla con un error genérico. Los flujos reales se prueban en src/region.
+type failingAuthentication struct{ authapp.AuthenticationService }
 
-func (unimplementedEmailLinking) Link(context.Context, string, string, string, string) (authdomain.LinkedEmailAccount, error) {
-	return authdomain.LinkedEmailAccount{}, apierror.ErrNotImplemented
+func (failingAuthentication) Register(context.Context, string, string) (string, error) {
+	return "", errors.New("fallo de prueba")
+}
+func (failingAuthentication) Login(context.Context, string, string) (ports.TokenPair, error) {
+	return ports.TokenPair{}, errors.New("fallo de prueba")
+}
+func (failingAuthentication) Refresh(context.Context, string) (ports.AccessToken, error) {
+	return ports.AccessToken{}, errors.New("fallo de prueba")
+}
+func (failingAuthentication) Logout(context.Context, string) error {
+	return errors.New("fallo de prueba")
 }
 
-func (unimplementedEmailLinking) Unlink(context.Context, string, string) error {
-	return apierror.ErrNotImplemented
-}
-
-// unimplementedRecommender responde ErrNotImplemented: el recomendador real se prueba en src/region.
-type unimplementedRecommender struct{}
-
-func (unimplementedRecommender) Generate(context.Context, string) ([]recdomain.Recommendation, error) {
-	return nil, apierror.ErrNotImplemented
-}
-
-func (unimplementedRecommender) RegisterFeedback(context.Context, string, string, recdomain.FeedbackAction, map[string]any) error {
-	return apierror.ErrNotImplemented
-}
-
-// bodyFor devuelve un cuerpo válido para la ruta: los handlers validan el JSON antes de llamar al módulo.
-func bodyFor(path string) string {
-	if strings.HasSuffix(path, "/feedback") {
-		return `{"accion":"ACEPTAR"}`
-	}
-	return "{}"
-}
-
+// newTestRouter arma el router sin más módulos: las rutas protegidas se rechazan por token antes de llegar a un
+// servicio, o solo se consulta el patrón registrado.
 func newTestRouter() http.Handler {
-	return NewRouter(NewControllers(Dependencies{
-		Authentication: stubs.UnimplementedAuthenticationService{},
-		Profile:        stubs.UnimplementedTravelerProfileService{},
-		Arrangements:   stubs.UnimplementedTravelArrangementsService{},
-		Permissions:    stubs.UnimplementedPermissionsService{},
-		Recommender:    unimplementedRecommender{},
-		EmailLinking:   unimplementedEmailLinking{},
-		Renderer:       ssr.NewSSRRenderer(),
-	}), tokenvalidator.NewSignedTokenValidator(fakeTokens{}))
+	return NewRouter(NewControllers(Dependencies{Authentication: failingAuthentication{}, Renderer: ssr.NewSSRRenderer()}),
+		tokenvalidator.NewSignedTokenValidator(fakeTokens{}))
 }
 
 // fakeTokens acepta únicamente el token "ok" (la validación real se prueba en tokenvalidator y en la integración).
@@ -101,33 +80,20 @@ var contractRoutes = []struct{ method, path string }{
 	{"DELETE", "/itinerarios/i1/accesos/v1"},
 }
 
-// Con los módulos sustituidos por stubs de la Fase 1, toda ruta protegida responde 501 NO_IMPLEMENTADO una vez
-// superado el token: verifica que cada ruta de AD §6.2 esté registrada y traduzca el error al formato de §6.1.
-func TestEveryProtectedRouteRespondsNotImplementedWithToken(t *testing.T) {
+// Cada ruta de AD §6.2 debe estar registrada en el router: se consulta el mux sin invocar el handler.
+func TestEveryContractRouteIsRegistered(t *testing.T) {
 	if len(contractRoutes) != 23 {
 		t.Fatalf("AD §6.2 define 23 rutas, la tabla tiene %d", len(contractRoutes))
 	}
-	router := newTestRouter()
+	mux, ok := newTestRouter().(*http.ServeMux)
+	if !ok {
+		t.Fatal("NewRouter debe devolver un *http.ServeMux")
+	}
 	for _, rt := range contractRoutes {
-		if isPublic(rt.path) {
-			continue
+		req := httptest.NewRequest(rt.method, rt.path, nil)
+		if _, pattern := mux.Handler(req); pattern == "" {
+			t.Errorf("%s %s no está registrada", rt.method, rt.path)
 		}
-		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
-			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(bodyFor(rt.path)))
-			req.Header.Set("Authorization", "Bearer ok")
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != http.StatusNotImplemented {
-				t.Fatalf("código %d, se esperaba 501", rec.Code)
-			}
-			var body map[string]string
-			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-				t.Fatal(err)
-			}
-			if body["codigo"] != "NO_IMPLEMENTADO" || body["mensaje"] == "" {
-				t.Fatalf("cuerpo de error inesperado: %v", body)
-			}
-		})
 	}
 }
 

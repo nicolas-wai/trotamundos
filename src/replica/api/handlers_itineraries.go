@@ -24,8 +24,6 @@ func writeItineraryError(w http.ResponseWriter, err error) {
 		httpresponse.WriteJSON(w, http.StatusForbidden, httpdto.AccessDeniedResponse{
 			Codigo: apierror.AccesoNoAutorizado, Mensaje: "No tienes acceso a este itinerario", PuedeSolicitar: denied.CanRequest,
 		})
-	case errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, permapp.ErrValidation):
 		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, permapp.ErrForbidden), errors.Is(err, permdomain.ErrAccessBlocked):

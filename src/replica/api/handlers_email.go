@@ -16,8 +16,6 @@ import (
 // writeEmailLinkError traduce los errores de la vinculación OAuth al contrato de AD §6.1.
 func writeEmailLinkError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, ports.ErrInvalidInput):
 		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, ports.ErrInvalidAuthorizationCode):

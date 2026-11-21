@@ -31,10 +31,6 @@ func (c *Controllers) Recommendations(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	recs, err := c.deps.Recommender.Generate(ctx, travelerIDFrom(r.Context()))
 	if err != nil {
-		if errors.Is(err, apierror.ErrNotImplemented) {
-			httpresponse.WriteNotImplemented(w)
-			return
-		}
 		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Las recomendaciones no están disponibles por ahora")
 		return
 	}
@@ -65,8 +61,6 @@ func (c *Controllers) RecommendationFeedback(w http.ResponseWriter, r *http.Requ
 	switch {
 	case err == nil:
 		httpresponse.WriteJSON(w, http.StatusOK, httpdto.FeedbackResponse{Registrado: true})
-	case errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, recommendations.ErrInvalidFeedback):
 		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, recommendations.ErrUnknownRecommendation):
@@ -86,8 +80,6 @@ func (c *Controllers) UpdatePreferences(w http.ResponseWriter, r *http.Request) 
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusOK)
-	case errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, authapp.ErrValidation):
 		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	default:

@@ -11,7 +11,7 @@ import (
 // NewRouter registra todas las rutas de AD §6.2 (patrones Go 1.22+, rutas en español según el contrato).
 // [Prototipo] HTTP local simulando HTTPS/TLS [ADR-12].
 // Las rutas de autenticación y el shell web estático son públicos; el resto exige token válido
-// (tokenvalidator [ADR-16]) y, hasta que cada módulo se implemente, responde 501 NO_IMPLEMENTADO.
+// (tokenvalidator [ADR-16]).
 func NewRouter(c *Controllers, v *tokenvalidator.SignedTokenValidator) http.Handler {
 	mux := http.NewServeMux()
 	registerWebShell(mux)

@@ -4,12 +4,8 @@ package api
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
-	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
@@ -50,14 +46,3 @@ func NewControllers(deps Dependencies) *Controllers { return &Controllers{deps: 
 // travelerIDFrom devuelve el idViajero del contexto. [ADR-11] Siempre sale del token, nunca del body.
 // Lo inyecta el middleware de tokenvalidator.
 func travelerIDFrom(ctx context.Context) string { return tokenvalidator.TravelerIDFrom(ctx) }
-
-// respondSkeleton cierra un handler del esqueleto de la Fase 1. Los errores de los servicios se traducen
-// al formato de AD §6.1; la serialización de respuestas exitosas llega en la fase de cada módulo.
-func respondSkeleton(w http.ResponseWriter, err error) {
-	switch {
-	case err == nil, errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
-	default:
-		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
-	}
-}

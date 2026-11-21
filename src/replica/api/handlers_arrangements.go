@@ -21,8 +21,6 @@ import (
 // writeArrangementError traduce los errores de Arreglos de viaje al contrato de AD §6.1.
 func writeArrangementError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, apierror.ErrNotImplemented):
-		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, application.ErrValidation):
 		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, application.ErrNotFound):
