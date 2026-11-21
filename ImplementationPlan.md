@@ -196,16 +196,16 @@ src/
 
 **Tareas:**
 
-- [ ] `travelarrangements/application`: `GetDashboard` (solo datos críticos, viajes completados fuera de la vista — US03), `GetArrangementDetail`, `CreateArrangement`, `UpdateArrangement`, `DeleteArrangement`; validaciones → `422`, inexistente → `404`, arreglo de otro viajero → `404/403`.
-- [ ] `travelarrangements/adapters`: repositorios sobre `PriorityQueuePort` (lecturas prioridad alta, escrituras baja).
-- [ ] Gestión de viajes mínima ◇ para que `POST /arreglos` tenga un `idViaje` válido (seed determinístico de un viaje demo al registrarse; sin endpoint nuevo).
-- [ ] `ssr`: plantillas `html/template` embebidas desde `src/client/web/templates`, payload reducido (sin `detalle`) [ADR17, ADR20].
-- [ ] `GET /dashboard` con negociación de contenido: HTML para web, JSON de §6.2 con `Accept: application/json` (móvil ◇). Incluye `avisosProveedores` (vacío en esta fase).
-- [ ] `GET /arreglos/{idArreglo}` (JSON o fragmento HTML), `POST /arreglos` `201`, `PUT /arreglos/{idArreglo}` `200`, `DELETE /arreglos/{idArreglo}` `204`.
-- [ ] Shell web ◇ (`GET /` y página de ingreso) servida estática: el runtime hace login vía `POST /login`, guarda el token en memoria/sessionStorage y obtiene `GET /dashboard` con `Authorization: Bearer` para inyectar el HTML renderizado.
-- [ ] `static/runtime.js` + `static/optimistic_state.js`: aplica el cambio local, muestra “guardando…”, envía `POST/PUT/DELETE`; en 2xx marca sincronizado, en no-2xx revierte y avisa [ADR18].
-- [ ] `static/visual_preferences.js`: orden y tema en LocalStorage (con try/catch), aplicados antes de mostrar [ADR19].
-- [ ] UI en español, simple y centrada en el viaje (QA11).
+- [x] `travelarrangements/application`: `GetDashboard` (solo datos críticos, viajes completados fuera de la vista — US03), `GetArrangementDetail`, `CreateArrangement`, `UpdateArrangement`, `DeleteArrangement`; validaciones → `422`, inexistente → `404`, arreglo de otro viajero → `404/403`.
+- [x] `travelarrangements/adapters`: repositorios sobre `PriorityQueuePort` (lecturas prioridad alta, escrituras baja).
+- [x] Gestión de viajes mínima ◇ para que `POST /arreglos` tenga un `idViaje` válido (seed determinístico de un viaje demo al registrarse; sin endpoint nuevo).
+- [x] `ssr`: plantillas `html/template` embebidas desde `src/client/web/templates`, payload reducido (sin `detalle`) [ADR17, ADR20].
+- [x] `GET /dashboard` con negociación de contenido: HTML para web, JSON de §6.2 con `Accept: application/json` (móvil ◇). Incluye `avisosProveedores` (vacío en esta fase).
+- [x] `GET /arreglos/{idArreglo}` (JSON o fragmento HTML), `POST /arreglos` `201`, `PUT /arreglos/{idArreglo}` `200`, `DELETE /arreglos/{idArreglo}` `204`.
+- [x] Shell web ◇ (`GET /` y página de ingreso) servida estática: el runtime hace login vía `POST /login`, guarda el token en memoria/sessionStorage y obtiene `GET /dashboard` con `Authorization: Bearer` para inyectar el HTML renderizado.
+- [x] `static/runtime.js` + `static/optimistic_state.js`: aplica el cambio local, muestra “guardando…”, envía `POST/PUT/DELETE`; en 2xx marca sincronizado, en no-2xx revierte y avisa [ADR18].
+- [x] `static/visual_preferences.js`: orden y tema en LocalStorage (con try/catch), aplicados antes de mostrar [ADR19].
+- [x] UI en español, simple y centrada en el viaje (QA11).
 
 **Criterio de verificación** (`go test ./...`):
 
@@ -215,6 +215,15 @@ src/
 - Test de que las escrituras del CRUD se encolaron como `ESCRITURA` y la lectura del dashboard como `LECTURA` (espía sobre el nodo de cola).
 - Smoke QA02: 200 lecturas de `GET /dashboard` locales con p95 < 800 ms.
 - Verificación manual documentada: `make run`, ingresar, crear un arreglo y ver el cambio instantáneo; forzar error (ej. id inexistente) y ver el rollback.
+
+**Verificación manual (Fase 3)** — `make run` y abrir `http://localhost:8080/`:
+
+1. "Crear cuenta" con un correo y una contraseña de 8+ caracteres: entra solo y muestra el viaje demo "Mi primer viaje".
+2. "Agregar reserva" → completar y guardar: la reserva aparece al instante con "guardando…" y luego queda sincronizada.
+3. Forzar error y ver el rollback: editar una reserva poniendo **Fin anterior a Inicio** y guardar → el servidor responde `422`, la fila vuelve a su estado anterior y aparece el aviso. (Otra vía: borrar la reserva con `curl -X DELETE` y luego editarla/eliminarla desde la UI → `404`.)
+4. "Ver detalle" pide el fragmento bajo demanda; "Ordenar por" y "Cambiar tema" persisten en LocalStorage (recargar la página los conserva).
+
+> Estado: los pasos 1–4 siguen el flujo del JS embebido (`src/client/web/static`), pero el JS no tiene tests automáticos y no se ejecutó en un navegador durante esta sesión (sin Node ni driver de navegador). Del lado servidor, el flujo equivalente se verificó con `curl` contra el binario y con los tests de integración.
 
 ---
 

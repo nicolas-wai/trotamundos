@@ -1,12 +1,13 @@
 package domain
 
 // Subtipos de ArrangementDetail (AD §2.1: Alojamiento, Vuelo, AutoRentado, Tren, Autobús).
+// Las etiquetas json definen las claves de "detalle" del contrato (AD §6.2), que es un objeto abierto por tipo.
 
 // Accommodation es el detalle de una reserva de alojamiento.
 type Accommodation struct {
-	HotelName string
-	Address   string
-	Stars     int
+	HotelName string `json:"hotel,omitempty"`
+	Address   string `json:"direccion,omitempty"`
+	Stars     int    `json:"estrellas,omitempty"`
 }
 
 // ArrangementType implementa ArrangementDetail.
@@ -14,10 +15,10 @@ func (Accommodation) ArrangementType() ArrangementType { return TypeAccommodatio
 
 // Flight es el detalle de un vuelo.
 type Flight struct {
-	Airline         string
-	FlightNumber    string
-	OriginIATA      string
-	DestinationIATA string
+	Airline         string `json:"aerolinea,omitempty"`
+	FlightNumber    string `json:"numeroVuelo,omitempty"`
+	OriginIATA      string `json:"origenIATA,omitempty"`
+	DestinationIATA string `json:"destinoIATA,omitempty"`
 }
 
 // ArrangementType implementa ArrangementDetail.
@@ -25,9 +26,9 @@ func (Flight) ArrangementType() ArrangementType { return TypeFlight }
 
 // RentalCar es el detalle de un auto rentado.
 type RentalCar struct {
-	Company         string
-	PickupLocation  string
-	DropoffLocation string
+	Company         string `json:"empresa,omitempty"`
+	PickupLocation  string `json:"retiro,omitempty"`
+	DropoffLocation string `json:"devolucion,omitempty"`
 }
 
 // ArrangementType implementa ArrangementDetail.
@@ -35,9 +36,9 @@ func (RentalCar) ArrangementType() ArrangementType { return TypeRentalCar }
 
 // Train es el detalle de un viaje en tren.
 type Train struct {
-	Operator    string
-	Origin      string
-	Destination string
+	Operator    string `json:"operador,omitempty"`
+	Origin      string `json:"origen,omitempty"`
+	Destination string `json:"destino,omitempty"`
 }
 
 // ArrangementType implementa ArrangementDetail.
@@ -45,9 +46,9 @@ func (Train) ArrangementType() ArrangementType { return TypeTrain }
 
 // Bus es el detalle de un viaje en autobús.
 type Bus struct {
-	Operator    string
-	Origin      string
-	Destination string
+	Operator    string `json:"operador,omitempty"`
+	Origin      string `json:"origen,omitempty"`
+	Destination string `json:"destino,omitempty"`
 }
 
 // ArrangementType implementa ArrangementDetail.

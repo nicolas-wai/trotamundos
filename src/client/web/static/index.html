@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es" data-theme="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trotamundos</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- [ADR-19] Se carga de forma síncrona y antes del primer render: aplica el tema guardado sin parpadeo. -->
+  <script src="/static/visual_preferences.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Trotamundos</h1>
+    <div id="toolbar" class="toolbar" hidden>
+      <label>Ordenar por
+        <select id="sort-select">
+          <option value="fecha">Fecha</option>
+          <option value="titulo">Título</option>
+          <option value="tipo">Tipo</option>
+        </select>
+      </label>
+      <button type="button" id="theme-toggle">Cambiar tema</button>
+      <button type="button" id="logout-button">Salir</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" role="alert" hidden></div>
+
+  <main>
+    <section id="login-view" class="card">
+      <h2>Ingresa a tu panel de viajes</h2>
+      <form id="login-form">
+        <label>Correo electrónico <input type="email" name="email" autocomplete="username" required></label>
+        <label>Contraseña (mínimo 8 caracteres) <input type="password" name="password" autocomplete="current-password" required minlength="8"></label>
+        <div class="form-actions">
+          <button type="submit">Ingresar</button>
+          <button type="button" id="register-button" class="secondary">Crear cuenta</button>
+        </div>
+        <p id="login-error" class="form-error" role="alert" hidden></p>
+      </form>
+    </section>
+    <section id="app" hidden></section>
+  </main>
+
+  <dialog id="arrangement-dialog">
+    <form id="arrangement-form">
+      <h2 id="dialog-title">Agregar reserva</h2>
+      <label>Tipo
+        <select name="tipo" id="field-type" required>
+          <option value="VUELO">Vuelo</option>
+          <option value="ALOJAMIENTO">Alojamiento</option>
+          <option value="AUTO">Auto</option>
+          <option value="TREN">Tren</option>
+          <option value="BUS">Bus</option>
+        </select>
+      </label>
+      <label>Título <input type="text" name="titulo" maxlength="200" required></label>
+      <label>Inicio <input type="datetime-local" name="fechaInicio" required></label>
+      <label>Fin (opcional) <input type="datetime-local" name="fechaFin"></label>
+      <fieldset id="detail-fields"><legend>Detalle</legend></fieldset>
+      <div class="form-actions">
+        <button type="button" id="dialog-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/optimistic_state.js"></script>
+  <script src="/static/recommendations_panel.js"></script>
+  <script src="/static/runtime.js"></script>
+</body>
+</html>

@@ -95,7 +95,19 @@ const (
 	RefreshTokenRevoke       = "refresh_token.revoke"
 )
 
-// DefaultCatalog devuelve el catálogo con las operaciones de la Fase 2 (Autenticación).
+// Nombres de recursos de Arreglos de viaje (Fase 3).
+const (
+	TripCreate                     = "trip.create"
+	TripList                       = "trip.list"
+	TripFindByID                   = "trip.find_by_id"
+	ArrangementListSummaries       = "arrangement.list_summaries"
+	ArrangementFindByID            = "arrangement.find_by_id"
+	ArrangementFindByDeduplication = "arrangement.find_by_deduplication_key"
+	ArrangementSave                = "arrangement.save"
+	ArrangementDelete              = "arrangement.delete"
+)
+
+// DefaultCatalog devuelve el catálogo con las operaciones de las Fases 2 (Autenticación) y 3 (Arreglos de viaje).
 func DefaultCatalog() *Catalog {
 	c := NewCatalog()
 	for _, op := range []Operation{
@@ -107,6 +119,18 @@ func DefaultCatalog() *Catalog {
 		{RefreshTokenSave, Write, ScopeShard, `INSERT INTO refresh_tokens (token_id, id_viajero, expires_at, revoked) VALUES (?, ?, ?, 0)`, []string{"tokenId", "idViajero", "expiresAt"}, "PERFIL"},
 		{RefreshTokenFind, Read, ScopeShard, `SELECT token_id, id_viajero, expires_at, revoked FROM refresh_tokens WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, ""},
 		{RefreshTokenRevoke, Write, ScopeShard, `UPDATE refresh_tokens SET revoked = 1 WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, "PERFIL"},
+
+		// Arreglos de viaje (Fase 3). Todas filtran por id_viajero además del id del recurso: un viajero
+		// nunca alcanza datos de otro. El SQL es determinístico porque la réplica de lectura lo reejecuta (ADR-10).
+		{TripCreate, Write, ScopeShard, `INSERT OR IGNORE INTO trips (id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`, []string{"idViaje", "idViajero", "nombre", "destino", "fechaInicio", "fechaFin", "estado"}, "VIAJE"},
+		{TripList, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viajero = ? ORDER BY fecha_inicio, id_viaje`, []string{"idViajero"}, ""},
+		{TripFindByID, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viaje = ? AND id_viajero = ?`, []string{"idViaje", "idViajero"}, ""},
+		// Dashboard: solo columnas críticas, sin detalle ni remitente [ADR-17].
+		{ArrangementListSummaries, Read, ScopeShard, `SELECT id_arreglo, id_viaje, tipo, titulo, origen, estado, fecha_inicio, fecha_fin FROM arrangements WHERE id_viajero = ? ORDER BY fecha_inicio, id_arreglo`, []string{"idViajero"}, ""},
+		{ArrangementFindByID, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, ""},
+		{ArrangementFindByDeduplication, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en FROM arrangements WHERE clave_deduplicacion = ? AND id_viajero = ?`, []string{"claveDeduplicacion", "idViajero"}, ""},
+		{ArrangementSave, Write, ScopeShard, `INSERT INTO arrangements (id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_arreglo) DO UPDATE SET id_viaje = excluded.id_viaje, tipo = excluded.tipo, titulo = excluded.titulo, origen = excluded.origen, remitente = excluded.remitente, estado = excluded.estado, detalle = excluded.detalle, clave_deduplicacion = excluded.clave_deduplicacion, fecha_inicio = excluded.fecha_inicio, fecha_fin = excluded.fecha_fin, generado_en_fuente = excluded.generado_en_fuente, actualizado_en = excluded.actualizado_en WHERE arrangements.id_viajero = excluded.id_viajero`, []string{"idArreglo", "idViaje", "idViajero", "tipo", "titulo", "origen", "remitente", "estado", "detalle", "claveDeduplicacion", "fechaInicio", "fechaFin", "generadoEnFuente", "actualizadoEn"}, "ARREGLO"},
+		{ArrangementDelete, Write, ScopeShard, `DELETE FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, "ARREGLO"},
 	} {
 		c.Register(op)
 	}

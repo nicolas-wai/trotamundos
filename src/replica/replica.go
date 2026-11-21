@@ -18,7 +18,9 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
+	taadapters "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/adapters"
 	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
+	tadomain "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/updateconsumer"
 	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
@@ -48,14 +50,21 @@ type Replica struct {
 	Consumer       *updateconsumer.UpdateConsumer
 }
 
-// New arma una réplica. Autenticación es real (Fase 2); los demás módulos siguen en modo esqueleto.
+// New arma una réplica. Autenticación (Fase 2) y Arreglos de viaje (Fase 3) son reales; los demás módulos
+// siguen en modo esqueleto.
 func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 	queueClient := priorityqueueclient.NewClient(deps.Queue)
 	if deps.Clock != nil {
 		queueClient.SetClock(deps.Clock)
 	}
 	renderer := ssr.NewRenderer()
-	arrangements := taapp.UnimplementedTravelArrangementsService{}
+	// Arreglos de viaje [ADR-02][ADR-09]: repositorios sobre la cola de prioridades y registro de tipos [QA-10].
+	typeRegistry := tadomain.DefaultArrangementTypeRegistry()
+	arrangements := taapp.NewService(
+		taadapters.NewQueueTripRepository(queueClient),
+		taadapters.NewQueueArrangementRepository(queueClient, typeRegistry),
+		typeRegistry, deps.Clock,
+	)
 	oauth := oauthmanager.NewOAuthManager(stubs.NewMockOAuth2AuthAdapter())
 	recommender := recommendations.NewRecommender(queueClient)
 
@@ -63,7 +72,9 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 	travelers := authadapters.NewQueueTravelerRepository(queueClient)
 	refreshTokens := authadapters.NewQueueRefreshTokenRepository(queueClient)
 	tokens := authadapters.NewJWTTokenServiceAdapter(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, refreshTokens, deps.Clock)
-	authService := authapp.NewService(travelers, authadapters.NewBcryptPasswordHasher(deps.PasswordCost), tokens, deps.Clock)
+	// El viaje demo se provisiona al registrarse (gestión de viajes mínima ◇) sin acoplar los módulos.
+	authService := authapp.NewService(travelers, authadapters.NewBcryptPasswordHasher(deps.PasswordCost), tokens, deps.Clock).
+		WithRegistrationHook(arrangements.ProvisionDemoTrip)
 	validator := tokenvalidator.NewValidator(tokens)
 
 	controllers := api.NewControllers(api.Dependencies{

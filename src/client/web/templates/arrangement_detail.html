@@ -1,0 +1,10 @@
+{{/* [ADR-17] Fragmento con el detalle completo de un arreglo, pedido bajo demanda. */}}
+{{define "arrangement_detail"}}<dl class="detail-fields">
+  <dt>Tipo</dt><dd>{{.TypeLabel}}</dd>
+  <dt>Estado</dt><dd>{{.StatusLabel}}</dd>
+  <dt>Origen</dt><dd>{{.OriginLabel}}{{if .Sender}} ({{.Sender}}){{end}}</dd>
+  {{- range .Fields}}
+  <dt>{{.Label}}</dt><dd>{{.Value}}</dd>
+  {{- end}}
+  <dt>Actualizado</dt><dd><time datetime="{{.UpdatedAt}}">{{.Updated}}</time></dd>
+</dl>{{end}}

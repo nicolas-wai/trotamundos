@@ -24,12 +24,17 @@ type AuthenticationService interface {
 // MinPasswordLength es el largo mínimo de contraseña aceptado.
 const MinPasswordLength = 8
 
+// RegistrationHook se invoca tras registrar una cuenta, sin que Autenticación conozca a otros módulos.
+// [Prototipo ◇] La composición lo usa para provisionar el viaje demo de Arreglos de viaje (Fase 3).
+type RegistrationHook func(ctx context.Context, travelerID string) error
+
 // Service implementa AuthenticationService sobre puertos propios (sin librerías concretas).
 type Service struct {
 	travelers TravelerRepository
 	hasher    PasswordHasher
 	tokens    ports.TokenServicePort
 	now       func() time.Time
+	onRegist  RegistrationHook
 }
 
 var _ AuthenticationService = (*Service)(nil)
@@ -40,6 +45,12 @@ func NewService(travelers TravelerRepository, hasher PasswordHasher, tokens port
 		now = time.Now
 	}
 	return &Service{travelers: travelers, hasher: hasher, tokens: tokens, now: now}
+}
+
+// WithRegistrationHook fija el hook posterior al registro y devuelve el servicio.
+func (s *Service) WithRegistrationHook(h RegistrationHook) *Service {
+	s.onRegist = h
+	return s
 }
 
 func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
@@ -66,6 +77,10 @@ func (s *Service) Register(ctx context.Context, email, password string) (string,
 	})
 	if err != nil {
 		return "", err
+	}
+	if s.onRegist != nil {
+		// La cuenta ya está creada: un fallo del hook no debe invalidar el registro.
+		_ = s.onRegist(ctx, id)
 	}
 	return id, nil
 }

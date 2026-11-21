@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
+	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/region"
 )
 
@@ -34,6 +35,32 @@ type env struct {
 	lb    *httptest.Server
 	clock *testClock
 	cfg   config.RegionConfig
+	spy   *queueSpy
+}
+
+// queueSpy registra las operaciones E8 que las réplicas entregan al nodo de cola de prioridades.
+type queueSpy struct {
+	mu  sync.Mutex
+	ops []events.QueuedOperation
+}
+
+func (s *queueSpy) record(op events.QueuedOperation) {
+	s.mu.Lock()
+	s.ops = append(s.ops, op)
+	s.mu.Unlock()
+}
+
+// mark devuelve la cantidad de operaciones vistas hasta ahora; since devuelve las posteriores a esa marca.
+func (s *queueSpy) mark() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.ops)
+}
+
+func (s *queueSpy) since(mark int) []events.QueuedOperation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]events.QueuedOperation(nil), s.ops[mark:]...)
 }
 
 // newEnv arma una región completa con SQLite real en un directorio temporal e intervalos acelerados.
@@ -44,7 +71,8 @@ func newEnv(t *testing.T) *env {
 	cfg.HeartbeatInterval = 20 * time.Millisecond
 	cfg.ShardCount = 3
 	clock := &testClock{t: time.Now()}
-	reg, err := region.New(cfg, region.Options{Clock: clock.Now, PasswordCost: 4})
+	spy := &queueSpy{}
+	reg, err := region.New(cfg, region.Options{Clock: clock.Now, PasswordCost: 4, OnQueuedOperation: spy.record})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +95,7 @@ func newEnv(t *testing.T) *env {
 		}
 		reg.Close()
 	})
-	return &env{reg: reg, lb: lb, clock: clock, cfg: cfg}
+	return &env{reg: reg, lb: lb, clock: clock, cfg: cfg, spy: spy}
 }
 
 func (e *env) do(t *testing.T, method, path, token string, body any) (*http.Response, map[string]any) {
@@ -142,9 +170,10 @@ func TestFlow55AuthenticationWithShortLivedTokens(t *testing.T) {
 	access, refresh := body["accessToken"].(string), body["refreshToken"].(string)
 
 	// Requests autenticados atendidos por réplicas distintas sin estado compartido: pasan el token (501 ≠ 401).
+	// Se usa /recomendaciones, que sigue sin implementar hasta la Fase 5.
 	replicas := map[string]bool{}
 	for i := 0; i < 4; i++ {
-		resp, body = e.do(t, "GET", "/dashboard", access, nil)
+		resp, body = e.do(t, "GET", "/recomendaciones", access, nil)
 		if resp.StatusCode != 501 || body["codigo"] != "NO_IMPLEMENTADO" {
 			t.Fatalf("con token válido: %d %v", resp.StatusCode, body)
 		}
@@ -153,14 +182,14 @@ func TestFlow55AuthenticationWithShortLivedTokens(t *testing.T) {
 	if len(replicas) != 2 {
 		t.Fatalf("debían atender las 2 réplicas, atendieron %v", replicas)
 	}
-	if resp, body = e.do(t, "GET", "/dashboard", "", nil); resp.StatusCode != 401 || body["codigo"] != "TOKEN_INVALIDO" {
+	if resp, body = e.do(t, "GET", "/recomendaciones", "", nil); resp.StatusCode != 401 || body["codigo"] != "TOKEN_INVALIDO" {
 		t.Fatalf("sin token: %d %v", resp.StatusCode, body)
 	}
 
 	// Access token vencido → 401 TOKEN_EXPIRADO (en ambas réplicas)
 	e.clock.Advance(901 * time.Second)
 	for i := 0; i < 2; i++ {
-		if resp, body = e.do(t, "GET", "/dashboard", access, nil); resp.StatusCode != 401 || body["codigo"] != "TOKEN_EXPIRADO" {
+		if resp, body = e.do(t, "GET", "/recomendaciones", access, nil); resp.StatusCode != 401 || body["codigo"] != "TOKEN_EXPIRADO" {
 			t.Fatalf("vencido: %d %v", resp.StatusCode, body)
 		}
 	}
@@ -170,7 +199,7 @@ func TestFlow55AuthenticationWithShortLivedTokens(t *testing.T) {
 	if resp.StatusCode != 200 || body["tokenType"] != "Bearer" || body["expiresIn"] != float64(900) {
 		t.Fatalf("refresh: %d %v", resp.StatusCode, body)
 	}
-	if resp, _ = e.do(t, "GET", "/dashboard", body["accessToken"].(string), nil); resp.StatusCode != 501 {
+	if resp, _ = e.do(t, "GET", "/recomendaciones", body["accessToken"].(string), nil); resp.StatusCode != 501 {
 		t.Fatalf("el access renovado debía ser aceptado: %d", resp.StatusCode)
 	}
 

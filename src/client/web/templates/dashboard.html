@@ -1,6 +1,37 @@
-{{/* [ADR-17][ADR-20] Plantilla SSR del dashboard: solo datos críticos. Se implementa en la Fase 3. */}}
-<!doctype html>
-<html lang="es">
-<head><meta charset="utf-8"><title>Trotamundos</title></head>
-<body><main id="dashboard"></main></body>
-</html>
+{{/* [ADR-17][ADR-20] Plantilla SSR del dashboard: solo datos críticos (sin detalle). Es un fragmento que el runtime inyecta en el shell. */}}
+{{define "arrangement_item"}}<li class="arrangement" data-id="{{.ID}}" data-type="{{.Type}}" data-title="{{.Title}}" data-start="{{.StartISO}}" data-end="{{.EndISO}}" data-status="{{.Status}}" data-origin="{{.Origin}}">
+  <span class="badge">{{.TypeLabel}}</span>
+  <span class="title">{{.Title}}</span>
+  <time datetime="{{.StartISO}}">{{.StartText}}</time>
+  <span class="status status-{{.Status}}">{{.StatusLabel}}</span>
+  <span class="origin">{{.OriginLabel}}</span>
+  <span class="actions">
+    <button type="button" data-action="detail">Ver detalle</button>
+    <button type="button" data-action="edit">Editar</button>
+    <button type="button" data-action="delete">Eliminar</button>
+  </span>
+  <div class="detail" hidden></div>
+</li>{{end}}
+{{define "dashboard"}}<section class="dashboard" data-role="dashboard">
+{{- range .Notices}}
+  <p class="notice" role="status">⚠ {{.Provider}}: {{.Message}}</p>
+{{- end}}
+{{- range .Trips}}
+  <article class="trip" data-trip-id="{{.ID}}">
+    <header>
+      <h2>{{.Name}}</h2>
+      <p class="trip-meta">{{.Destination}}{{if .Dates}} · {{.Dates}}{{end}}</p>
+      <button type="button" data-action="add">Agregar reserva</button>
+    </header>
+    <ul class="arrangements">
+    {{- range .Arrangements}}
+      {{template "arrangement_item" .}}
+    {{- else}}
+      <li class="empty">Aún no hay reservas en este viaje.</li>
+    {{- end}}
+    </ul>
+  </article>
+{{- else}}
+  <p class="empty">No tienes viajes activos.</p>
+{{- end}}
+</section>{{end}}

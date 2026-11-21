@@ -1,17 +1,20 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 
+	"github.com/nicolas-wai/trotamundos/src/client/web"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
 )
 
 // NewRouter registra todas las rutas de AD §6.2 (patrones Go 1.22+, rutas en español según el contrato).
 // [Prototipo] HTTP local simulando HTTPS/TLS.
-// Las rutas de autenticación son públicas; el resto exige token válido (tokenvalidator [ADR-16]) y,
-// hasta que cada módulo se implemente, responde 501 NO_IMPLEMENTADO.
+// Las rutas de autenticación y el shell web estático son públicos; el resto exige token válido
+// (tokenvalidator [ADR-16]) y, hasta que cada módulo se implemente, responde 501 NO_IMPLEMENTADO.
 func NewRouter(c *Controllers, v *tokenvalidator.Validator) http.Handler {
 	mux := http.NewServeMux()
+	registerWebShell(mux)
 	protected := func(pattern string, h http.HandlerFunc) {
 		mux.Handle(pattern, v.Middleware(h))
 	}
@@ -50,4 +53,31 @@ func NewRouter(c *Controllers, v *tokenvalidator.Validator) http.Handler {
 	protected("DELETE /itinerarios/{id}/accesos/{idViajero}", c.RevokeItineraryAccess)
 
 	return mux
+}
+
+// registerWebShell sirve el shell del cliente web (AD §4.1), embebido en el binario: GET / y /static/.
+// Es contenido estático sin datos de viajero; el runtime obtiene el dashboard con Bearer token. [ADR-20]
+func registerWebShell(mux *http.ServeMux) {
+	static, err := fs.Sub(web.Static, "static")
+	if err != nil {
+		panic(err) // error de programación: el directorio está embebido
+	}
+	mux.Handle("GET /static/", noCache(http.StripPrefix("/static/", http.FileServerFS(static))))
+	mux.Handle("GET /{$}", noCache(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		index, err := fs.ReadFile(static, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(index)
+	})))
+}
+
+// noCache evita servir JS/CSS obsoletos tras reconstruir el binario del prototipo.
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
 }

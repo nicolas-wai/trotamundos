@@ -11,14 +11,21 @@ import (
 // El adapter lo implementa sobre PriorityQueuePort: lecturas con prioridad alta, escrituras baja [ADR-09].
 type TripRepository interface {
 	ListByTraveler(ctx context.Context, travelerID string) ([]domain.Trip, error)
+	// FindByID devuelve ErrNotFound si el viaje no existe o no es del viajero.
 	FindByID(ctx context.Context, travelerID, tripID string) (domain.Trip, error)
+	// Save crea el viaje si no existe (idempotente por idViaje).
 	Save(ctx context.Context, trip domain.Trip) error
 }
 
 // ArrangementRepository persiste los arreglos de un viaje.
 type ArrangementRepository interface {
+	// ListSummariesByTraveler devuelve solo datos críticos (sin detalle ni remitente) para el dashboard. [ADR-17]
+	ListSummariesByTraveler(ctx context.Context, travelerID string) ([]domain.TravelArrangement, error)
+	// FindByID devuelve ErrNotFound si el arreglo no existe o es de otro viajero.
 	FindByID(ctx context.Context, travelerID, arrangementID string) (domain.TravelArrangement, error)
 	FindByDeduplicationKey(ctx context.Context, travelerID string, key domain.DeduplicationKey) (domain.TravelArrangement, error)
+	// Save inserta o actualiza (upsert por idArreglo).
 	Save(ctx context.Context, arrangement domain.TravelArrangement) error
+	// Delete devuelve ErrNotFound si no hay nada que borrar.
 	Delete(ctx context.Context, travelerID, arrangementID string) error
 }

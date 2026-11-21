@@ -16,8 +16,10 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/datanode"
 	"github.com/nicolas-wai/trotamundos/src/loadbalancer"
+	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/priorityqueue"
 	"github.com/nicolas-wai/trotamundos/src/replica"
+	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
 	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
@@ -25,6 +27,20 @@ import (
 type Options struct {
 	Clock        func() time.Time // reloj de tokens (nil = time.Now); útil en pruebas
 	PasswordCost int              // costo de bcrypt (0 = por defecto)
+	// OnQueuedOperation espía cada operación E8 que las réplicas entregan al nodo de cola de prioridades
+	// (pruebas: verificar que lecturas y escrituras entran con su tipo). nil = sin espía.
+	OnQueuedOperation func(events.QueuedOperation)
+}
+
+// observedQueue decora el nodo de cola con un observador de las operaciones admitidas.
+type observedQueue struct {
+	inner   priorityqueueclient.Submitter
+	observe func(events.QueuedOperation)
+}
+
+func (o observedQueue) Submit(ctx context.Context, op events.QueuedOperation) (ports.Future, error) {
+	o.observe(op)
+	return o.inner.Submit(ctx, op)
 }
 
 // Region agrupa todos los contenedores de una región.
@@ -83,10 +99,14 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 	monitor := priorityqueue.NewDataHeartbeatMonitor(r.DataHeartbeats, r.Switch, cfg.HeartbeatInterval)
 	r.Queue = priorityqueue.NewPriorityQueueNode(r.Switch, monitor)
 
+	var submitter priorityqueueclient.Submitter = r.Queue
+	if opts.OnQueuedOperation != nil {
+		submitter = observedQueue{inner: r.Queue, observe: opts.OnQueuedOperation}
+	}
 	for i := 0; i < cfg.ReplicaCount; i++ {
 		id := ReplicaID(cfg, i)
 		r.Replicas = append(r.Replicas, replica.New(id, cfg, replica.Dependencies{
-			Queue: r.Queue, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
+			Queue: submitter, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
 		}))
 		r.ReplicaHeartbeats.Track(id)
 	}
