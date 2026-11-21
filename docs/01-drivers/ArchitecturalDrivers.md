@@ -386,6 +386,8 @@ Los escenarios fueron priorizados de la siguiente manera:
 | QA09 (Itinerarios compartidos)    | H                       | M                  | US07                |
 | QA10 (Nuevos medios)              | H                       | M                  | US01 (Todas)        |
 | QA03 (Primer contenido mobile)    | M                       | M                  | US01 (Todas)        |
+| QA17 (Generacion de recomendacion)| M                       | M                  | US08                |
+| QA18 (Retroalimentacion de recomendaciones)| M                       | M                  | US08                |
 | QA02 (Tiempo respuesta web)       | M                       | L                  | US01 (Todas)        |
 | QA11 (UI simple)                  | M                       | L                  | US01                |
 | QA16 (Proveedor redes)            | L                       | M                  | US07                |
