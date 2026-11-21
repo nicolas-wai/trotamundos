@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
@@ -29,18 +29,18 @@ func NewQueueTravelerRepository(data ports.DataGateway) *QueueTravelerRepository
 // Create reserva el email en el directorio y crea el viajero en su shard (compensa si el segundo paso falla).
 func (r *QueueTravelerRepository) Create(ctx context.Context, t domain.Traveler) error {
 	dir := map[string]any{"email": t.Email, "idViajero": t.TravelerID}
-	if _, err := r.data.Write(ctx, "", operations.DirectoryTravelerReserve, dir); err != nil {
+	if _, err := r.data.Write(ctx, "", resources.DirectoryTravelerReserve, dir); err != nil {
 		if errors.Is(err, ports.ErrDataConflict) {
 			return application.ErrEmailTaken
 		}
 		return err
 	}
-	_, err := r.data.Write(ctx, t.TravelerID, operations.TravelerCreate, map[string]any{
+	_, err := r.data.Write(ctx, t.TravelerID, resources.TravelerCreate, map[string]any{
 		"idViajero": t.TravelerID, "email": t.Email, "encryptedPassword": t.EncryptedPassword,
 		"createdAt": t.CreatedAt.UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
-		_, _ = r.data.Write(ctx, "", operations.DirectoryTravelerRelease, dir) // compensación
+		_, _ = r.data.Write(ctx, "", resources.DirectoryTravelerRelease, dir) // compensación
 		return err
 	}
 	return nil
@@ -48,7 +48,7 @@ func (r *QueueTravelerRepository) Create(ctx context.Context, t domain.Traveler)
 
 // FindByEmail resuelve el idViajero en el directorio y lee el viajero de su shard.
 func (r *QueueTravelerRepository) FindByEmail(ctx context.Context, email string) (domain.Traveler, error) {
-	res, err := r.data.Read(ctx, "", operations.DirectoryTravelerLookup, map[string]any{"email": email})
+	res, err := r.data.Read(ctx, "", resources.DirectoryTravelerLookup, map[string]any{"email": email})
 	if err != nil {
 		return domain.Traveler{}, err
 	}
@@ -61,7 +61,7 @@ func (r *QueueTravelerRepository) FindByEmail(ctx context.Context, email string)
 
 // FindByID lee el viajero de su shard.
 func (r *QueueTravelerRepository) FindByID(ctx context.Context, travelerID string) (domain.Traveler, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.TravelerFindByID, map[string]any{"idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.TravelerFindByID, map[string]any{"idViajero": travelerID})
 	if err != nil {
 		return domain.Traveler{}, err
 	}
@@ -88,7 +88,7 @@ func NewQueueRefreshTokenRepository(data ports.DataGateway) *QueueRefreshTokenRe
 
 // Save persiste el refresh token.
 func (r *QueueRefreshTokenRepository) Save(ctx context.Context, t domain.RefreshToken) error {
-	_, err := r.data.Write(ctx, t.TravelerID, operations.RefreshTokenSave, map[string]any{
+	_, err := r.data.Write(ctx, t.TravelerID, resources.RefreshTokenSave, map[string]any{
 		"tokenId": t.TokenID, "idViajero": t.TravelerID, "expiresAt": t.ExpiresAt.UTC().Format(time.RFC3339Nano),
 	})
 	return err
@@ -96,7 +96,7 @@ func (r *QueueRefreshTokenRepository) Save(ctx context.Context, t domain.Refresh
 
 // FindByID lee el refresh token del shard del viajero.
 func (r *QueueRefreshTokenRepository) FindByID(ctx context.Context, travelerID, tokenID string) (domain.RefreshToken, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.RefreshTokenFind, map[string]any{"tokenId": tokenID, "idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.RefreshTokenFind, map[string]any{"tokenId": tokenID, "idViajero": travelerID})
 	if err != nil {
 		return domain.RefreshToken{}, err
 	}
@@ -111,7 +111,7 @@ func (r *QueueRefreshTokenRepository) FindByID(ctx context.Context, travelerID, 
 
 // Revoke marca el refresh token como revocado.
 func (r *QueueRefreshTokenRepository) Revoke(ctx context.Context, travelerID, tokenID string) error {
-	_, err := r.data.Write(ctx, travelerID, operations.RefreshTokenRevoke, map[string]any{"tokenId": tokenID, "idViajero": travelerID})
+	_, err := r.data.Write(ctx, travelerID, resources.RefreshTokenRevoke, map[string]any{"tokenId": tokenID, "idViajero": travelerID})
 	return err
 }
 
@@ -123,12 +123,12 @@ func str(v any) string {
 	return s
 }
 
-// QueueLinkedEmailAccountRepository [ADR-09][ADR-15] Implementa LinkedEmailAccountRepository sobre la cola de
+// QueueLinkedEmailAccountRepository [ADR-09][ADR-15] Implementa ports.LinkedEmailAccountPort sobre la cola de
 // prioridades. Los tokens llegan ya cifrados y se guardan en base64; además registra la cuenta en el directorio ◇
 // para que el planificador de sondeo la encuentre sin recorrer los shards.
 type QueueLinkedEmailAccountRepository struct{ data ports.DataGateway }
 
-var _ application.LinkedEmailAccountRepository = (*QueueLinkedEmailAccountRepository)(nil)
+var _ ports.LinkedEmailAccountPort = (*QueueLinkedEmailAccountRepository)(nil)
 
 // NewQueueLinkedEmailAccountRepository crea el repositorio.
 func NewQueueLinkedEmailAccountRepository(data ports.DataGateway) *QueueLinkedEmailAccountRepository {
@@ -137,7 +137,7 @@ func NewQueueLinkedEmailAccountRepository(data ports.DataGateway) *QueueLinkedEm
 
 // Save guarda la cuenta en el shard del viajero y la registra en el directorio.
 func (r *QueueLinkedEmailAccountRepository) Save(ctx context.Context, a domain.LinkedEmailAccount) error {
-	_, err := r.data.Write(ctx, a.TravelerID, operations.LinkedAccountSave, map[string]any{
+	_, err := r.data.Write(ctx, a.TravelerID, resources.LinkedAccountSave, map[string]any{
 		"idCuenta": a.AccountID, "idViajero": a.TravelerID, "proveedor": a.Provider,
 		"encryptedAccessToken":  base64.StdEncoding.EncodeToString(a.EncryptedAccessToken),
 		"encryptedRefreshToken": base64.StdEncoding.EncodeToString(a.EncryptedRefreshToken),
@@ -146,7 +146,7 @@ func (r *QueueLinkedEmailAccountRepository) Save(ctx context.Context, a domain.L
 	if err != nil {
 		return err
 	}
-	_, err = r.data.Write(ctx, "", operations.DirectoryLinkedAccountRegister, map[string]any{
+	_, err = r.data.Write(ctx, "", resources.DirectoryLinkedAccountRegister, map[string]any{
 		"idCuenta": a.AccountID, "idViajero": a.TravelerID, "proveedor": a.Provider,
 	})
 	return err
@@ -154,12 +154,12 @@ func (r *QueueLinkedEmailAccountRepository) Save(ctx context.Context, a domain.L
 
 // FindByID lee la cuenta del shard del viajero.
 func (r *QueueLinkedEmailAccountRepository) FindByID(ctx context.Context, travelerID, accountID string) (domain.LinkedEmailAccount, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.LinkedAccountFind, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.LinkedAccountFind, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
 	if err != nil {
 		return domain.LinkedEmailAccount{}, err
 	}
 	if len(res.Rows) == 0 {
-		return domain.LinkedEmailAccount{}, application.ErrLinkedAccountNotFound
+		return domain.LinkedEmailAccount{}, ports.ErrLinkedAccountNotFound
 	}
 	row := res.Rows[0]
 	access, _ := base64.StdEncoding.DecodeString(str(row["encrypted_access_token"]))
@@ -172,14 +172,14 @@ func (r *QueueLinkedEmailAccountRepository) FindByID(ctx context.Context, travel
 
 // Delete borra la cuenta del shard y del directorio.
 func (r *QueueLinkedEmailAccountRepository) Delete(ctx context.Context, travelerID, accountID string) error {
-	res, err := r.data.Write(ctx, travelerID, operations.LinkedAccountDelete, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	res, err := r.data.Write(ctx, travelerID, resources.LinkedAccountDelete, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
 	if err != nil {
 		return err
 	}
 	if res.RowsAffected == 0 {
-		return application.ErrLinkedAccountNotFound
+		return ports.ErrLinkedAccountNotFound
 	}
-	_, err = r.data.Write(ctx, "", operations.DirectoryLinkedAccountRemove, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	_, err = r.data.Write(ctx, "", resources.DirectoryLinkedAccountRemove, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
 	return err
 }
 
@@ -196,7 +196,7 @@ func NewQueuePreferencesRepository(data ports.DataGateway) *QueuePreferencesRepo
 
 // Get lee las preferencias (LECTURA, prioridad alta). Un viajero sin fila tiene preferencias vacías.
 func (r *QueuePreferencesRepository) Get(ctx context.Context, travelerID string) (domain.TravelerPreferences, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.PreferencesGet, map[string]any{"idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.PreferencesGet, map[string]any{"idViajero": travelerID})
 	if err != nil {
 		return domain.TravelerPreferences{}, err
 	}
@@ -243,6 +243,6 @@ func (r *QueuePreferencesRepository) Save(ctx context.Context, p domain.Traveler
 		}
 		params[name] = raw
 	}
-	_, err := r.data.Write(ctx, p.TravelerID, operations.PreferencesSave, params)
+	_, err := r.data.Write(ctx, p.TravelerID, resources.PreferencesSave, params)
 	return err
 }

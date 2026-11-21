@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	auth "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
@@ -57,7 +57,7 @@ func (c *ConcurrentCollector) Get(ctx context.Context, travelerID string) (ports
 	}
 	key := map[string]any{"idViajero": travelerID}
 	run(func(ctx context.Context) error {
-		res, err := c.data.Read(ctx, travelerID, operations.TripList, key)
+		res, err := c.data.Read(ctx, travelerID, resources.TripList, key)
 		for _, row := range res.Rows {
 			history.Trips = append(history.Trips, arrangements.Trip{
 				TripID: str(row, "id_viaje"), TravelerID: travelerID, Name: str(row, "nombre"),
@@ -67,7 +67,7 @@ func (c *ConcurrentCollector) Get(ctx context.Context, travelerID string) (ports
 		return err
 	})
 	run(func(ctx context.Context) error {
-		res, err := c.data.Read(ctx, travelerID, operations.ArrangementListSummaries, key)
+		res, err := c.data.Read(ctx, travelerID, resources.ArrangementListSummaries, key)
 		for _, row := range res.Rows {
 			history.Arrangements = append(history.Arrangements, arrangements.TravelArrangement{
 				ArrangementID: str(row, "id_arreglo"), TripID: str(row, "id_viaje"), TravelerID: travelerID,
@@ -78,7 +78,7 @@ func (c *ConcurrentCollector) Get(ctx context.Context, travelerID string) (ports
 		return err
 	})
 	run(func(ctx context.Context) error {
-		res, err := c.data.Read(ctx, travelerID, operations.RecommendationFeedbackList, key)
+		res, err := c.data.Read(ctx, travelerID, resources.RecommendationFeedbackList, key)
 		for _, row := range res.Rows {
 			params := map[string]any{}
 			_ = json.Unmarshal([]byte(str(row, "parametros_ajustados")), &params)

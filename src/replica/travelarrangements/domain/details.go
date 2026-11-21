@@ -1,6 +1,7 @@
 package domain
 
 // Subtipos de ArrangementDetail (AD §2.1: Alojamiento, Vuelo, AutoRentado, Tren, Autobús).
+// [QA-10] Agregar un tipo de arreglo = nuevo subtipo + registro en el ArrangementTypeRegistry, sin tocar el resto del dominio. [ADR-02]
 // Las etiquetas json definen las claves de "detalle" del contrato (AD §6.2), que es un objeto abierto por tipo.
 
 // Accommodation es el detalle de una reserva de alojamiento.

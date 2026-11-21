@@ -4,6 +4,7 @@ package replica
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -27,7 +28,6 @@ import (
 	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	tadomain "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/updateconsumer"
-	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
 // ReplicaHeaderName identifica qué réplica atendió la request (útil para verificar el balanceo).
@@ -44,8 +44,8 @@ type Dependencies struct {
 	// ejecuta Integraciones externas (solo vincula correos con el OAuth por defecto).
 	MessageQueue ports.MessageQueuePort // cola P2P [ADR-04]
 	EventBus     ports.EventBusPort     // bus de eventos interno (E2) [ADR-07]
-	OAuth        ports.OAuthEmailPort   // proveedor OAuth del correo (nil = MockOAuth2AuthAdapter propio)
-	// ProviderCatalog es el catálogo de proveedores de las recomendaciones (nil = StubProviderCatalog). [ADR-25]
+	OAuth        ports.OAuthEmailPort   // proveedor OAuth del correo (obligatorio; la región inyecta el adaptador) [ADR-15]
+	// ProviderCatalog es el catálogo de proveedores de las recomendaciones (obligatorio; lo inyecta la región). [ADR-25]
 	ProviderCatalog ports.ProviderCatalogPort
 	Providers       integrations.Clients // APIs externas de los adapters (stubs)
 	// RunIntegrations marca a la réplica que ejecuta el consumidor de la cola P2P y el planificador de sondeo.
@@ -58,24 +58,32 @@ type Replica struct {
 	ID             string
 	Config         config.RegionConfig
 	API            http.Handler
-	TokenValidator *tokenvalidator.Validator
-	SSR            *ssr.Renderer
-	QueueClient    *priorityqueueclient.Client
+	TokenValidator *tokenvalidator.SignedTokenValidator
+	SSR            *ssr.SSRRenderer
+	QueueClient    *priorityqueueclient.PriorityQueueClient
 	Recommender    *recommendations.Recommender
 	OAuthManager   *oauthmanager.OAuthManager
-	Heartbeat      *heartbeat.Emitter
+	Heartbeat      *heartbeat.ReplicaHeartbeatEmitter
 	Consumer       *updateconsumer.UpdateConsumer // nil si la réplica no ejecuta Integraciones
 	Integrations   *integrations.Module           // nil si la réplica no ejecuta Integraciones
 }
 
 // New arma una réplica con todos sus módulos: Autenticación (Fase 2), Arreglos de viaje (Fase 3), Integraciones
 // externas (Fase 4), Permisos y Recomendaciones (Fase 5).
-func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
-	queueClient := priorityqueueclient.NewClient(deps.Queue)
+// La réplica no crea mocks por su cuenta: OAuth y ProviderCatalog deben inyectarse desde la raíz de composición
+// (región); si faltan, New devuelve error en vez de caer en un stub en silencio.
+func New(id string, cfg config.RegionConfig, deps Dependencies) (*Replica, error) {
+	if deps.OAuth == nil {
+		return nil, errors.New("réplica " + id + ": falta Dependencies.OAuth (ports.OAuthEmailPort)")
+	}
+	if deps.ProviderCatalog == nil {
+		return nil, errors.New("réplica " + id + ": falta Dependencies.ProviderCatalog (ports.ProviderCatalogPort)")
+	}
+	queueClient := priorityqueueclient.NewPriorityQueueClient(deps.Queue)
 	if deps.Clock != nil {
 		queueClient.SetClock(deps.Clock)
 	}
-	renderer := ssr.NewRenderer()
+	renderer := ssr.NewSSRRenderer()
 	// Arreglos de viaje [ADR-02][ADR-09]: repositorios sobre la cola de prioridades y registro de tipos [QA-10].
 	typeRegistry := tadomain.DefaultArrangementTypeRegistry()
 	arrangements := taapp.NewService(
@@ -84,25 +92,17 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		typeRegistry, deps.Clock,
 	).WithProviderNotices(taadapters.NewQueueProviderNoticeRepository(queueClient)) // avisos E2 [ADR-07]
 
-	// Gestor OAuth del correo [ADR-15]: tokens cifrados con AES-GCM detrás del puerto TokenCipher [QA-08].
+	// Gestor OAuth del correo [ADR-15]: tokens cifrados con AES-GCM detrás del puerto TokenCipherPort [QA-08].
 	tokenCipher, err := authadapters.NewAESGCMTokenCipher(cfg.TokenEncryptionKey)
 	if err != nil {
-		panic(err) // la configuración ya fue validada (RegionConfig.Validate)
+		return nil, err
 	}
-	var oauthProvider ports.OAuthEmailPort = deps.OAuth
-	if oauthProvider == nil {
-		oauthProvider = stubs.NewMockOAuth2AuthAdapter()
-	}
-	oauth := oauthmanager.NewOAuthManager(oauthProvider, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher)
+	oauth := oauthmanager.NewOAuthManager(deps.OAuth, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher)
 
 	// Preferencias del perfil [ADR-25]: las usan el perfil (PUT /perfil/preferencias), el recolector y HITL.
 	preferences := authadapters.NewQueuePreferencesRepository(queueClient)
-	catalog := deps.ProviderCatalog
-	if catalog == nil {
-		catalog = stubs.NewStubProviderCatalog()
-	}
 	// Recomendaciones [ADR-23][ADR-24][ADR-25]: recolector concurrente → motor de filtrado → HITL.
-	recommender := recommendations.NewRecommender(queueClient, preferences, catalog)
+	recommender := recommendations.NewRecommender(queueClient, preferences, deps.ProviderCatalog)
 
 	// Control de permisos [ADR-13][QA-09]: itinerarios en el shard del dueño, resuelto por el directorio ◇ [ADR-11].
 	// Consulta Arreglos de viaje por su repositorio (AD §4.4: PERM → VIA) y publica E7 en el bus de eventos.
@@ -122,7 +122,7 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 	// El viaje demo se provisiona al registrarse (gestión de viajes mínima ◇) sin acoplar los módulos.
 	authService := authapp.NewService(travelers, authadapters.NewBcryptPasswordHasher(deps.PasswordCost), tokens, deps.Clock).
 		WithRegistrationHook(arrangements.ProvisionDemoTrip)
-	validator := tokenvalidator.NewValidator(tokens)
+	validator := tokenvalidator.NewSignedTokenValidator(tokens)
 
 	controllers := api.NewControllers(api.Dependencies{
 		Authentication: authService,
@@ -171,10 +171,10 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		QueueClient:    queueClient,
 		Recommender:    recommender,
 		OAuthManager:   oauth,
-		Heartbeat:      heartbeat.NewEmitter(id, deps.Heartbeat, cfg.HeartbeatInterval),
+		Heartbeat:      heartbeat.NewReplicaHeartbeatEmitter(id, deps.Heartbeat, cfg.HeartbeatInterval),
 		Consumer:       consumer,
 		Integrations:   module,
-	}
+	}, nil
 }
 
 // Handler devuelve el handler HTTP de la réplica.

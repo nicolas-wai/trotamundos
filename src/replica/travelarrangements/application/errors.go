@@ -2,7 +2,7 @@ package application
 
 import "errors"
 
-// Errores del módulo Arreglos de viaje que la API traduce a códigos HTTP (AD §6.1).
+// Errores del módulo Arreglos de viaje que la API traduce a códigos HTTP (AD §6.1). [ADR-02] [QA-10]
 var (
 	// ErrValidation → 422 VALIDACION_FALLIDA.
 	ErrValidation = errors.New("validación fallida")

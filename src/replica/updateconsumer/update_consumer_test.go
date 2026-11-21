@@ -11,11 +11,12 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/messagequeue"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
+	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
 // fakeService aplica E1 según el resultado programado para cada eventId.
 type fakeService struct {
-	application.UnimplementedTravelArrangementsService
+	stubs.UnimplementedTravelArrangementsService
 	mu      sync.Mutex
 	results map[string][]error // por eventId: resultados sucesivos (el último se repite)
 	applied []string

@@ -1,11 +1,8 @@
-// Package apierror materializa las convenciones de errores de AD §6.1.
+// Package apierror materializa las convenciones de errores de AD §6.1 (códigos y cuerpo de error).
+// Es un contrato sin tecnología: solo biblioteca estándar. La escritura HTTP vive en httpresponse. [ADR-02]
 package apierror
 
-import (
-	"encoding/json"
-	"errors"
-	"net/http"
-)
+import "errors"
 
 // ErrorResponse es el cuerpo de error del contrato: { "codigo", "mensaje" }.
 type ErrorResponse struct {
@@ -31,22 +28,3 @@ const (
 
 // ErrNotImplemented lo devuelven los componentes del esqueleto de la Fase 1.
 var ErrNotImplemented = errors.New("no implementado")
-
-// WriteError escribe el cuerpo de error con el código HTTP indicado.
-func WriteError(w http.ResponseWriter, status int, codigo, mensaje string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(ErrorResponse{Codigo: codigo, Mensaje: mensaje})
-}
-
-// WriteNotImplemented responde 501 NO_IMPLEMENTADO.
-func WriteNotImplemented(w http.ResponseWriter) {
-	WriteError(w, http.StatusNotImplemented, NoImplementado, "Funcionalidad no implementada en esta fase del prototipo")
-}
-
-// WriteJSON escribe una respuesta JSON con el código HTTP indicado.
-func WriteJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}

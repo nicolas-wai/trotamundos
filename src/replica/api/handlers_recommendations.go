@@ -8,6 +8,7 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
@@ -31,10 +32,10 @@ func (c *Controllers) Recommendations(w http.ResponseWriter, r *http.Request) {
 	recs, err := c.deps.Recommender.Generate(ctx, travelerIDFrom(r.Context()))
 	if err != nil {
 		if errors.Is(err, apierror.ErrNotImplemented) {
-			apierror.WriteNotImplemented(w)
+			httpresponse.WriteNotImplemented(w)
 			return
 		}
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Las recomendaciones no están disponibles por ahora")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Las recomendaciones no están disponibles por ahora")
 		return
 	}
 	out := httpdto.RecommendationsResponse{Recomendaciones: []httpdto.RecommendationItem{}}
@@ -44,7 +45,7 @@ func (c *Controllers) Recommendations(w http.ResponseWriter, r *http.Request) {
 			Metadatos: rec.ItemMetadata, Proveedor: rec.Provider,
 		})
 	}
-	apierror.WriteJSON(w, http.StatusOK, out)
+	httpresponse.WriteJSON(w, http.StatusOK, out)
 }
 
 // RecommendationFeedback atiende POST /recomendaciones/{idRecomendacion}/feedback (HITL, QA-18).
@@ -57,19 +58,19 @@ func (c *Controllers) RecommendationFeedback(w http.ResponseWriter, r *http.Requ
 	switch action {
 	case recdomain.FeedbackAccept, recdomain.FeedbackReject, recdomain.FeedbackAdjust:
 	default:
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, "accion debe ser ACEPTAR, RECHAZAR o AJUSTAR")
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, "accion debe ser ACEPTAR, RECHAZAR o AJUSTAR")
 		return
 	}
 	err := c.deps.Recommender.RegisterFeedback(r.Context(), travelerIDFrom(r.Context()), r.PathValue("idRecomendacion"), action, req.ParametrosAjustados)
 	switch {
 	case err == nil:
-		apierror.WriteJSON(w, http.StatusOK, httpdto.FeedbackResponse{Registrado: true})
+		httpresponse.WriteJSON(w, http.StatusOK, httpdto.FeedbackResponse{Registrado: true})
 	case errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
+		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, recommendations.ErrInvalidFeedback):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, recommendations.ErrUnknownRecommendation):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "La recomendación no existe")
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "La recomendación no existe")
 	default:
 		writeUnavailableOrInternal(w, err)
 	}
@@ -86,9 +87,9 @@ func (c *Controllers) UpdatePreferences(w http.ResponseWriter, r *http.Request) 
 	case err == nil:
 		w.WriteHeader(http.StatusOK)
 	case errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
+		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, authapp.ErrValidation):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	default:
 		writeUnavailableOrInternal(w, err)
 	}
@@ -96,8 +97,8 @@ func (c *Controllers) UpdatePreferences(w http.ResponseWriter, r *http.Request) 
 
 func writeUnavailableOrInternal(w http.ResponseWriter, err error) {
 	if errors.Is(err, ports.ErrDataNodeUnavailable) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
 		return
 	}
-	apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+	httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 }

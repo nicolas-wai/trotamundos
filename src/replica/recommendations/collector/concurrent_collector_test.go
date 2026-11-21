@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	auth "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 )
@@ -58,11 +58,11 @@ func (g *spyGateway) Read(ctx context.Context, travelerID, resource string, _ ma
 		return ports.DataResult{}, errors.New("falla de lectura de " + resource)
 	}
 	switch resource {
-	case operations.TripList:
+	case resources.TripList:
 		return ports.DataResult{Rows: []map[string]any{{"id_viaje": "t1", "destino": "Lisboa", "estado": "ACTIVO"}}}, nil
-	case operations.ArrangementListSummaries:
+	case resources.ArrangementListSummaries:
 		return ports.DataResult{Rows: []map[string]any{{"id_arreglo": "a1", "tipo": "VUELO", "titulo": "Vuelo a Lisboa"}}}, nil
-	case operations.RecommendationFeedbackList:
+	case resources.RecommendationFeedbackList:
 		return ports.DataResult{Rows: []map[string]any{{"id_recomendacion": "r1", "accion": "RECHAZAR", "parametros_ajustados": "{}", "fecha": "2026-01-01T00:00:00Z"}}}, nil
 	}
 	return ports.DataResult{}, nil
@@ -106,9 +106,9 @@ func TestCollectorReadsInParallelAndUnifies(t *testing.T) {
 // Una falla parcial se propaga: no se recomienda con un historial incompleto.
 func TestCollectorPropagatesPartialFailure(t *testing.T) {
 	b := newBarrier(4)
-	c := NewConcurrentCollector(&spyGateway{barrier: b, failOn: operations.RecommendationFeedbackList}, spyPreferences{barrier: b})
+	c := NewConcurrentCollector(&spyGateway{barrier: b, failOn: resources.RecommendationFeedbackList}, spyPreferences{barrier: b})
 	_, err := c.Get(context.Background(), "v1")
-	if err == nil || err.Error() != "falla de lectura de "+operations.RecommendationFeedbackList {
+	if err == nil || err.Error() != "falla de lectura de "+resources.RecommendationFeedbackList {
 		t.Fatalf("se esperaba la falla de la lectura de feedback, hubo %v", err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
@@ -33,7 +34,7 @@ type Dependencies struct {
 	Permissions    permapp.PermissionsService
 	Recommender    ports.RecommenderPort
 	EmailLinking   EmailLinkingService
-	Renderer       *ssr.Renderer
+	Renderer       *ssr.SSRRenderer
 	// RecommendationTimeout limita la generación de recomendaciones (0 = 3 s, QA-17).
 	RecommendationTimeout time.Duration
 }
@@ -55,8 +56,8 @@ func travelerIDFrom(ctx context.Context) string { return tokenvalidator.Traveler
 func respondSkeleton(w http.ResponseWriter, err error) {
 	switch {
 	case err == nil, errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
+		httpresponse.WriteNotImplemented(w)
 	default:
-		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 	}
 }

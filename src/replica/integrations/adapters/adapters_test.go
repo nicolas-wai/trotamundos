@@ -34,7 +34,7 @@ func byTipo(t *testing.T, us []events.ProviderUpdateNormalized) map[string]event
 // Cada formato de stub se traduce al modelo del puerto (ADR-05, QA-14, QA-15).
 func TestEmailAdapterTranslatesSemiStructuredText(t *testing.T) {
 	api := stubs.NewStubEmailProviderAPI()
-	a := email.NewAdapter(api, fixedToken(stubs.AccessTokenPrefix+"gmail-ana"))
+	a := email.NewEmailAdapter(api, fixedToken(stubs.AccessTokenPrefix+"gmail-ana"))
 	got, err := a.Poll(context.Background(), ref, time.Time{})
 	if err != nil || len(got) != 2 {
 		t.Fatalf("%v %d", err, len(got))
@@ -57,10 +57,10 @@ func TestEmailAdapterTranslatesSemiStructuredText(t *testing.T) {
 
 func TestEmailAdapterErrors(t *testing.T) {
 	api := stubs.NewStubEmailProviderAPI()
-	if _, err := email.NewAdapter(api, fixedToken("token-ajeno")).Poll(context.Background(), ref, time.Time{}); !errors.Is(err, ports.ErrInvalidCredential) {
+	if _, err := email.NewEmailAdapter(api, fixedToken("token-ajeno")).Poll(context.Background(), ref, time.Time{}); !errors.Is(err, ports.ErrInvalidCredential) {
 		t.Fatalf("token inválido → CredencialInvalida, fue %v", err)
 	}
-	good := email.NewAdapter(api, fixedToken(stubs.AccessTokenPrefix+"x"))
+	good := email.NewEmailAdapter(api, fixedToken(stubs.AccessTokenPrefix+"x"))
 	api.SetFailureMode(stubs.FailMalformed)
 	if _, err := good.Poll(context.Background(), ref, time.Time{}); !errors.Is(err, ports.ErrUnparseableResponse) {
 		t.Fatalf("respuesta malformada → RespuestaNoParseable, fue %v", err)
@@ -82,7 +82,7 @@ func TestEmailAdapterErrors(t *testing.T) {
 }
 
 func TestAgencyAdapterTranslatesNestedJSON(t *testing.T) {
-	a := agency.NewAdapter(stubs.NewStubAgencyAPI())
+	a := agency.NewAgencyAdapter(stubs.NewStubAgencyAPI())
 	got, err := a.Poll(context.Background(), ref, time.Time{})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("%v %d", err, len(got))
@@ -97,7 +97,7 @@ func TestAgencyAdapterTranslatesNestedJSON(t *testing.T) {
 
 func TestAgencyAdapterMalformedAndUnavailable(t *testing.T) {
 	api := stubs.NewStubAgencyAPI()
-	a := agency.NewAdapter(api)
+	a := agency.NewAgencyAdapter(api)
 	api.SetFailureMode(stubs.FailMalformed)
 	if _, err := a.Poll(context.Background(), ref, time.Time{}); !errors.Is(err, ports.ErrUnparseableResponse) {
 		t.Fatalf("JSON truncado: %v", err)
@@ -112,7 +112,7 @@ func TestAgencyAdapterMalformedAndUnavailable(t *testing.T) {
 }
 
 func TestTravelSystemAdapterTranslatesIATARecords(t *testing.T) {
-	a := travelsystem.NewAdapter(stubs.NewStubTravelSystemAPI())
+	a := travelsystem.NewTravelSystemAdapter(stubs.NewStubTravelSystemAPI())
 	got, err := a.Poll(context.Background(), ref, time.Time{})
 	if err != nil || len(got) != 2 {
 		t.Fatalf("%v %d", err, len(got))
@@ -134,7 +134,7 @@ func TestTravelSystemAdapterTranslatesIATARecords(t *testing.T) {
 
 func TestTravelSystemAdapterMalformed(t *testing.T) {
 	api := stubs.NewStubTravelSystemAPI()
-	a := travelsystem.NewAdapter(api)
+	a := travelsystem.NewTravelSystemAdapter(api)
 	api.SetFailureMode(stubs.FailMalformed)
 	if _, err := a.Poll(context.Background(), ref, time.Time{}); !errors.Is(err, ports.ErrUnparseableResponse) {
 		t.Fatalf("cuerpo ilegible: %v", err)

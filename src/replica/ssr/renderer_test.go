@@ -29,7 +29,7 @@ func sampleDashboard() application.Dashboard {
 }
 
 func TestRenderDashboardShowsCriticalDataOnly(t *testing.T) {
-	html, err := NewRenderer().RenderDashboard(context.Background(), sampleDashboard())
+	html, err := NewSSRRenderer().RenderDashboard(context.Background(), sampleDashboard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestRenderDashboardShowsCriticalDataOnly(t *testing.T) {
 }
 
 func TestRenderDashboardWithoutTrips(t *testing.T) {
-	html, err := NewRenderer().RenderDashboard(context.Background(), application.Dashboard{})
+	html, err := NewSSRRenderer().RenderDashboard(context.Background(), application.Dashboard{})
 	if err != nil || !strings.Contains(string(html), "No tienes viajes activos.") {
 		t.Fatalf("dashboard vacío: %q %v", html, err)
 	}
@@ -66,7 +66,7 @@ func TestRenderArrangementDetailIncludesTypedFields(t *testing.T) {
 		Detail:    &domain.Flight{Airline: "LATAM", FlightNumber: "LA800", OriginIATA: "EZE", DestinationIATA: "LIM"},
 		UpdatedAt: time.Date(2026, 11, 21, 9, 30, 0, 0, time.UTC),
 	}
-	html, err := NewRenderer().RenderArrangementDetail(context.Background(), a)
+	html, err := NewSSRRenderer().RenderArrangementDetail(context.Background(), a)
 	if err != nil {
 		t.Fatal(err)
 	}

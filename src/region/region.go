@@ -1,6 +1,6 @@
 // Package region es la raíz de composición de una región completa (AD §3.1): LoadBalancer → N réplicas →
 // cola de prioridades → nodo de datos primario y pasivo, con sus monitores de heartbeat.
-// [ADR-21] El sistema completo se replica por región. [QA-13] Una región se describe solo por RegionConfig.
+// [ADR-08] N réplicas stateless detrás del LoadBalancer. [ADR-21] El sistema completo se replica por región. [QA-13] Una región se describe solo por RegionConfig.
 // La usan cmd/trotamundos y las pruebas de integración (así no se duplica la composición).
 package region
 
@@ -140,12 +140,18 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 	})
 	for i := 0; i < cfg.ReplicaCount; i++ {
 		id := ReplicaID(cfg, i)
-		r.Replicas = append(r.Replicas, replica.New(id, cfg, replica.Dependencies{
+		rep, err := replica.New(id, cfg, replica.Dependencies{
 			Queue: submitter, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
 			MessageQueue: r.MessageQueue, EventBus: r.EventBus, OAuth: r.ExternalAPIs.OAuth, ProviderCatalog: r.ProviderCatalog,
 			Providers:       integrations.Clients{Mail: r.ExternalAPIs.Email, Agency: r.ExternalAPIs.Agency, TravelSystem: r.ExternalAPIs.TravelSystem},
 			RunIntegrations: i == 0,
-		}))
+		})
+		if err != nil {
+			r.ActiveNode.Close()
+			r.PassiveNode.Close()
+			return nil, err
+		}
+		r.Replicas = append(r.Replicas, rep)
 		r.ReplicaHeartbeats.Track(id)
 	}
 	return r, nil

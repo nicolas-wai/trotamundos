@@ -8,22 +8,25 @@ import (
 	"strings"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
 type ctxKey struct{}
 
-// Validator [ADR-16] Valida firma y vigencia del access token localmente, sin estado compartido,
+// SignedTokenValidator [ADR-16] Valida firma y vigencia del access token localmente, sin estado compartido,
 // e inyecta idViajero en el contexto (clave de partición [ADR-11]: siempre sale del token, nunca del body).
-type Validator struct {
+type SignedTokenValidator struct {
 	tokens ports.TokenServicePort
 }
 
-// NewValidator crea el validador sobre el servicio de tokens.
-func NewValidator(tokens ports.TokenServicePort) *Validator { return &Validator{tokens: tokens} }
+// NewSignedTokenValidator crea el validador sobre el servicio de tokens.
+func NewSignedTokenValidator(tokens ports.TokenServicePort) *SignedTokenValidator {
+	return &SignedTokenValidator{tokens: tokens}
+}
 
 // Authenticate extrae y valida el Bearer token de la request.
-func (v *Validator) Authenticate(r *http.Request) (ports.Claims, error) {
+func (v *SignedTokenValidator) Authenticate(r *http.Request) (ports.Claims, error) {
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 		return ports.Claims{}, ports.ErrTokenInvalid
@@ -32,15 +35,15 @@ func (v *Validator) Authenticate(r *http.Request) (ports.Claims, error) {
 }
 
 // Middleware protege un handler exigiendo token válido (401 TOKEN_EXPIRADO / TOKEN_INVALIDO).
-func (v *Validator) Middleware(next http.Handler) http.Handler {
+func (v *SignedTokenValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, err := v.Authenticate(r)
 		switch {
 		case errors.Is(err, ports.ErrTokenExpired):
-			apierror.WriteError(w, http.StatusUnauthorized, apierror.TokenExpirado, "El access token expiró")
+			httpresponse.WriteError(w, http.StatusUnauthorized, apierror.TokenExpirado, "El access token expiró")
 			return
 		case err != nil:
-			apierror.WriteError(w, http.StatusUnauthorized, apierror.TokenInvalido, "Token inválido o ausente")
+			httpresponse.WriteError(w, http.StatusUnauthorized, apierror.TokenInvalido, "Token inválido o ausente")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, claims.TravelerID)))

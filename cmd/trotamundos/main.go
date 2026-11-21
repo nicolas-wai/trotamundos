@@ -36,7 +36,7 @@ func run(cfg config.RegionConfig) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// [Prototipo] HTTP local simulando HTTPS/TLS.
+	// [Prototipo] HTTP local simulando HTTPS/TLS [ADR-12]: aplica a Cliente→LB→Réplica y a las conexiones con proveedores.
 	reg, err := region.New(cfg, region.Options{})
 	if err != nil {
 		return err

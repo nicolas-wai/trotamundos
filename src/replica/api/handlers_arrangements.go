@@ -10,6 +10,7 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
@@ -21,15 +22,15 @@ import (
 func writeArrangementError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
+		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, application.ErrValidation):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, application.ErrNotFound):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El arreglo de viaje no existe")
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El arreglo de viaje no existe")
 	case errors.Is(err, ports.ErrDataNodeUnavailable), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
 	default:
-		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 	}
 }
 
@@ -57,7 +58,7 @@ func (c *Controllers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wantsJSON(r) {
-		apierror.WriteJSON(w, http.StatusOK, dashboardToDTO(dashboard))
+		httpresponse.WriteJSON(w, http.StatusOK, dashboardToDTO(dashboard))
 		return
 	}
 	body, err := c.deps.Renderer.RenderDashboard(r.Context(), dashboard)
@@ -84,7 +85,7 @@ func (c *Controllers) GetArrangement(w http.ResponseWriter, r *http.Request) {
 		writeHTML(w, body)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusOK, detailToDTO(a))
+	httpresponse.WriteJSON(w, http.StatusOK, detailToDTO(a))
 }
 
 // CreateArrangement atiende POST /arreglos (escritura por la cola de prioridades).
@@ -98,7 +99,7 @@ func (c *Controllers) CreateArrangement(w http.ResponseWriter, r *http.Request) 
 		writeArrangementError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusCreated, httpdto.CreateArrangementResponse{IDArreglo: id})
+	httpresponse.WriteJSON(w, http.StatusCreated, httpdto.CreateArrangementResponse{IDArreglo: id})
 }
 
 // UpdateArrangement atiende PUT /arreglos/{idArreglo}.

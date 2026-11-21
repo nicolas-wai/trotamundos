@@ -1,4 +1,5 @@
 // Package web es el contenedor "Cliente web" (AD §4.1), embebido en el binario.
+// [ADR-01] Cliente-Servidor: el cliente solo presenta; la lógica vive en el servidor y se comparte con el móvil.
 package web
 
 import "embed"

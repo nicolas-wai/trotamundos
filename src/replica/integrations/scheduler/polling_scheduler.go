@@ -24,7 +24,7 @@ type TargetSource interface {
 	Targets(ctx context.Context) ([]Target, error)
 }
 
-// AdapterRegistry resuelve el adapter de un tipo de proveedor (lo implementa providerport.Registry). [ADR-05]
+// AdapterRegistry resuelve el adapter de un tipo de proveedor (lo implementa providerport.ProviderPortRegistry). [ADR-05]
 type AdapterRegistry interface {
 	Adapter(t domain.ProviderType) (ports.ExternalProviderPort, bool)
 }

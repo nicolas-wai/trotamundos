@@ -152,7 +152,7 @@ src/
 
 **Objetivo:** Dejar funcionando la infraestructura de la región de punta a punta y el primer caso de uso real: registro, login, refresh y logout con tokens de vida corta validados localmente por cualquier réplica. Toda lectura/escritura atraviesa cliente de cola → cola de prioridades → conmutador → nodo de datos → partición → caché/primaria/réplica. Incluye la detección de caídas por heartbeat y el intercambio primario/pasivo.
 
-**Componentes / interfaces involucrados:** `LoadBalancer`, `ReplicaHeartbeatMonitor`, `heartbeat.Emitter`, `api`, `tokenvalidator`, `authentication`, `priorityqueueclient` (`PriorityQueuePort`), `PriorityQueueNode` (colas de lectura/escritura, `DataNodeSwitch`, `DataHeartbeatMonitor`), `DataNode` (`DataPort`, `PartitionRouter`, `InMemoryCacheAdapter`, primaria, réplica de lectura, `SyncEmitter`), `TokenServicePort`, `HeartbeatPort`. Eventos E3, E4, E5, E6, E8. Flujos AD 5.5 y 5.7.
+**Componentes / interfaces involucrados:** `LoadBalancer`, `ReplicaHeartbeatMonitor`, `heartbeat.ReplicaHeartbeatEmitter`, `api`, `tokenvalidator`, `authentication`, `priorityqueueclient` (`PriorityQueuePort`), `PriorityQueueNode` (colas de lectura/escritura, `DataNodeSwitch`, `DataHeartbeatMonitor`), `DataNode` (`DataPort`, `PartitionRouter`, `InMemoryCacheAdapter`, primaria, réplica de lectura, `SyncEmitter`), `TokenServicePort`, `HeartbeatPort`. Eventos E3, E4, E5, E6, E8. Flujos AD 5.5 y 5.7.
 
 **ADRs aplicados:** ADR08, ADR09, ADR10, ADR11, ADR12 (simulado), ADR14, ADR16, ADR21, ADR22.
 
@@ -167,7 +167,7 @@ src/
 - [x] `priorityqueueclient`: implementa `PriorityQueuePort`, construye E8 con `idViajero` tomado del token (nunca del body) [ADR09, ADR11].
 - [x] Nodo pasivo: segundo `DataNode`; `SyncEmitter` periódico con `VACUUM INTO` y E5 [ADR21].
 - [x] `DataHeartbeatMonitor` + `DataNodeSwitch`: tras 3 pulsos perdidos redirige al pasivo, emite E4 y el nodo promovido activa su heartbeat y sincronización [ADR22].
-- [x] `heartbeat.Emitter` en cada réplica y `ReplicaHeartbeatMonitor` que retira/reincorpora réplicas del `LoadBalancer` [ADR22, ADR08].
+- [x] `heartbeat.ReplicaHeartbeatEmitter` en cada réplica y `ReplicaHeartbeatMonitor` que retira/reincorpora réplicas del `LoadBalancer` [ADR22, ADR08].
 - [x] `LoadBalancer` round-robin sobre réplicas vivas con comentario `// [Prototipo] HTTP local simulando HTTPS/TLS` [ADR08, ADR12].
 - [x] `authentication/adapters`: `BcryptPasswordHasher` (`x/crypto/bcrypt`) y `JWTTokenServiceAdapter` (HS256, access 900 s, refresh persistido y revocable) que implementan puertos propios [ADR14, ADR16].
 - [x] `authentication/application`: `Register`, `Login`, `Refresh`, `Logout`, con email único (vía `directory`).

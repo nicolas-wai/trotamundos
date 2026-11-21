@@ -3,7 +3,7 @@ package scheduler
 import (
 	"context"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/domain"
 )
@@ -27,7 +27,7 @@ func NewDirectoryTargetSource(data ports.DataGateway) *DirectoryTargetSource {
 // Targets lista los objetivos vigentes.
 func (d *DirectoryTargetSource) Targets(ctx context.Context) ([]Target, error) {
 	var out []Target
-	accounts, err := d.data.Read(ctx, "", operations.DirectoryLinkedAccountList, nil)
+	accounts, err := d.data.Read(ctx, "", resources.DirectoryLinkedAccountList, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (d *DirectoryTargetSource) Targets(ctx context.Context) ([]Target, error) {
 			ProviderID: domain.ProviderIDFor(domain.ProviderEmail, provider), TravelerID: traveler, AccountID: account,
 		}})
 	}
-	travelers, err := d.data.Read(ctx, "", operations.DirectoryTravelerList, nil)
+	travelers, err := d.data.Read(ctx, "", resources.DirectoryTravelerList, nil)
 	if err != nil {
 		return nil, err
 	}

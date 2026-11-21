@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
@@ -27,7 +27,7 @@ func NewQueueTripRepository(data ports.DataGateway) *QueueTripRepository {
 
 // ListByTraveler lee los viajes del viajero (LECTURA, prioridad alta).
 func (r *QueueTripRepository) ListByTraveler(ctx context.Context, travelerID string) ([]domain.Trip, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.TripList, map[string]any{"idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.TripList, map[string]any{"idViajero": travelerID})
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (r *QueueTripRepository) ListByTraveler(ctx context.Context, travelerID str
 
 // FindByID lee un viaje del viajero; ErrNotFound si no existe o es de otro viajero.
 func (r *QueueTripRepository) FindByID(ctx context.Context, travelerID, tripID string) (domain.Trip, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.TripFindByID, map[string]any{"idViaje": tripID, "idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.TripFindByID, map[string]any{"idViaje": tripID, "idViajero": travelerID})
 	if err != nil {
 		return domain.Trip{}, err
 	}
@@ -52,7 +52,7 @@ func (r *QueueTripRepository) FindByID(ctx context.Context, travelerID, tripID s
 
 // Save crea el viaje si no existe (ESCRITURA, prioridad baja).
 func (r *QueueTripRepository) Save(ctx context.Context, t domain.Trip) error {
-	_, err := r.data.Write(ctx, t.TravelerID, operations.TripCreate, map[string]any{
+	_, err := r.data.Write(ctx, t.TravelerID, resources.TripCreate, map[string]any{
 		"idViaje": t.TripID, "idViajero": t.TravelerID, "nombre": t.Name, "destino": t.Destination,
 		"fechaInicio": t.StartDate.UTC().Format(time.DateOnly), "fechaFin": t.EndDate.UTC().Format(time.DateOnly),
 		"estado": string(t.Status),
@@ -78,7 +78,7 @@ func NewQueueArrangementRepository(data ports.DataGateway, registry *domain.Arra
 
 // ListSummariesByTraveler lee solo datos críticos (sin detalle) para el dashboard. [ADR-17]
 func (r *QueueArrangementRepository) ListSummariesByTraveler(ctx context.Context, travelerID string) ([]domain.TravelArrangement, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.ArrangementListSummaries, map[string]any{"idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.ArrangementListSummaries, map[string]any{"idViajero": travelerID})
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (r *QueueArrangementRepository) ListSummariesByTraveler(ctx context.Context
 
 // FindByID lee el arreglo completo; ErrNotFound si no existe o es de otro viajero.
 func (r *QueueArrangementRepository) FindByID(ctx context.Context, travelerID, arrangementID string) (domain.TravelArrangement, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.ArrangementFindByID, map[string]any{"idArreglo": arrangementID, "idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.ArrangementFindByID, map[string]any{"idArreglo": arrangementID, "idViajero": travelerID})
 	if err != nil {
 		return domain.TravelArrangement{}, err
 	}
@@ -108,7 +108,7 @@ func (r *QueueArrangementRepository) FindByID(ctx context.Context, travelerID, a
 
 // FindByDeduplicationKey busca un arreglo del viajero por su clave de deduplicación (US01).
 func (r *QueueArrangementRepository) FindByDeduplicationKey(ctx context.Context, travelerID string, key domain.DeduplicationKey) (domain.TravelArrangement, error) {
-	res, err := r.data.Read(ctx, travelerID, operations.ArrangementFindByDeduplication, map[string]any{"claveDeduplicacion": string(key), "idViajero": travelerID})
+	res, err := r.data.Read(ctx, travelerID, resources.ArrangementFindByDeduplication, map[string]any{"claveDeduplicacion": string(key), "idViajero": travelerID})
 	if err != nil {
 		return domain.TravelArrangement{}, err
 	}
@@ -128,7 +128,7 @@ func (r *QueueArrangementRepository) Save(ctx context.Context, a domain.TravelAr
 		}
 		detail = raw
 	}
-	_, err := r.data.Write(ctx, a.TravelerID, operations.ArrangementSave, map[string]any{
+	_, err := r.data.Write(ctx, a.TravelerID, resources.ArrangementSave, map[string]any{
 		"idArreglo": a.ArrangementID, "idViaje": a.TripID, "idViajero": a.TravelerID, "tipo": string(a.Type),
 		"titulo": a.Title, "origen": string(a.Origin), "remitente": nullable(string(a.Sender)), "estado": string(a.Status),
 		"detalle": string(detail), "claveDeduplicacion": nullable(string(a.DeduplicationKey)),
@@ -140,7 +140,7 @@ func (r *QueueArrangementRepository) Save(ctx context.Context, a domain.TravelAr
 
 // Delete borra el arreglo del viajero; ErrNotFound si no existía.
 func (r *QueueArrangementRepository) Delete(ctx context.Context, travelerID, arrangementID string) error {
-	res, err := r.data.Write(ctx, travelerID, operations.ArrangementDelete, map[string]any{"idArreglo": arrangementID, "idViajero": travelerID})
+	res, err := r.data.Write(ctx, travelerID, resources.ArrangementDelete, map[string]any{"idArreglo": arrangementID, "idViajero": travelerID})
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func NewQueueProviderNoticeRepository(data ports.DataGateway) *QueueProviderNoti
 
 // Save guarda (o reemplaza) el aviso del proveedor.
 func (r *QueueProviderNoticeRepository) Save(ctx context.Context, n application.ProviderNoticeRecord) error {
-	_, err := r.data.Write(ctx, "", operations.DirectoryProviderNoticeSave, map[string]any{
+	_, err := r.data.Write(ctx, "", resources.DirectoryProviderNoticeSave, map[string]any{
 		"idProveedor": n.ProviderID, "idViajero": nullable(n.TravelerID), "mensaje": n.Message,
 		"proximoIntento": n.RetryAt.UTC().Format(time.RFC3339Nano),
 	})
@@ -231,13 +231,13 @@ func (r *QueueProviderNoticeRepository) Save(ctx context.Context, n application.
 
 // Clear retira el aviso del proveedor.
 func (r *QueueProviderNoticeRepository) Clear(ctx context.Context, providerID string) error {
-	_, err := r.data.Write(ctx, "", operations.DirectoryProviderNoticeClear, map[string]any{"idProveedor": providerID})
+	_, err := r.data.Write(ctx, "", resources.DirectoryProviderNoticeClear, map[string]any{"idProveedor": providerID})
 	return err
 }
 
 // List devuelve todos los avisos vigentes.
 func (r *QueueProviderNoticeRepository) List(ctx context.Context) ([]application.ProviderNoticeRecord, error) {
-	res, err := r.data.Read(ctx, "", operations.DirectoryProviderNoticeList, nil)
+	res, err := r.data.Read(ctx, "", resources.DirectoryProviderNoticeList, nil)
 	if err != nil {
 		return nil, err
 	}

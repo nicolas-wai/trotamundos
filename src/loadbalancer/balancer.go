@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 )
 
 // Backend es una réplica registrada en el balanceador.
@@ -38,7 +39,7 @@ func NewLoadBalancer(backends []Backend) *LoadBalancer {
 	for _, b := range backends {
 		p := httputil.NewSingleHostReverseProxy(b.URL)
 		p.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-			apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Réplica no disponible")
+			httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Réplica no disponible")
 		}
 		lb.members = append(lb.members, &member{id: b.ID, proxy: p, healthy: true})
 	}
@@ -98,7 +99,7 @@ func (lb *LoadBalancer) pick() *member {
 func (lb *LoadBalancer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m := lb.pick()
 	if m == nil {
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "No hay réplicas disponibles")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "No hay réplicas disponibles")
 		return
 	}
 	m.proxy.ServeHTTP(w, r)

@@ -19,20 +19,22 @@ type Client interface {
 	Records(ctx context.Context, travelerID string, since time.Time) ([]byte, error)
 }
 
-// Adapter implementa ports.ExternalProviderPort para proveedores de tipo VIAJES: traduce los registros del sistema
+// TravelSystemAdapter implementa ports.ExternalProviderPort para proveedores de tipo VIAJES: traduce los registros del sistema
 // de viajes (códigos IATA, estados HK/TK/UC) al modelo del puerto. [ADR-05][QA-14]
-type Adapter struct{ client Client }
+type TravelSystemAdapter struct{ client Client }
 
-var _ ports.ExternalProviderPort = (*Adapter)(nil)
+var _ ports.ExternalProviderPort = (*TravelSystemAdapter)(nil)
 
-// NewAdapter crea el adapter.
-func NewAdapter(client Client) *Adapter { return &Adapter{client: client} }
+// NewTravelSystemAdapter crea el adapter.
+func NewTravelSystemAdapter(client Client) *TravelSystemAdapter {
+	return &TravelSystemAdapter{client: client}
+}
 
 // ProviderType devuelve el tipo de proveedor que atiende.
-func (*Adapter) ProviderType() domain.ProviderType { return domain.ProviderTravelSystem }
+func (*TravelSystemAdapter) ProviderType() domain.ProviderType { return domain.ProviderTravelSystem }
 
 // Poll sondea el sistema de viajes y traduce su respuesta.
-func (a *Adapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
+func (a *TravelSystemAdapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
 	raw, err := a.client.Records(ctx, ref.TravelerID, since)
 	if err != nil {
 		return nil, providerport.ClassifyError(err)

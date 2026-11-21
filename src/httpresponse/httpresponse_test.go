@@ -1,10 +1,12 @@
-package apierror
+package httpresponse
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 )
 
 func TestWriteNotImplemented(t *testing.T) {
@@ -27,7 +29,7 @@ func TestWriteNotImplemented(t *testing.T) {
 
 func TestWriteErrorUsesGivenStatus(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, http.StatusUnauthorized, TokenExpirado, "token vencido")
+	WriteError(rec, http.StatusUnauthorized, apierror.TokenExpirado, "token vencido")
 	if rec.Code != 401 {
 		t.Fatalf("código %d", rec.Code)
 	}

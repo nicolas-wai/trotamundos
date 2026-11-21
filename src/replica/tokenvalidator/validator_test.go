@@ -23,7 +23,7 @@ func (tokens) Validate(t string) (ports.Claims, error) {
 
 func TestMiddleware(t *testing.T) {
 	var seen string
-	h := NewValidator(tokens{}).Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := NewSignedTokenValidator(tokens{}).Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = TravelerIDFrom(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 	}))

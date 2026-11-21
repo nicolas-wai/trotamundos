@@ -9,24 +9,24 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/domain"
 )
 
-// Registry [ADR-05][QA-10][QA-14] Registro de adapters por tipo de proveedor, único punto por el que entran
+// ProviderPortRegistry [ADR-05][QA-10][QA-14] Registro de adapters por tipo de proveedor, único punto por el que entran
 // datos externos. Agregar un tipo de proveedor = registrar un adapter.
-type Registry struct {
+type ProviderPortRegistry struct {
 	adapters map[domain.ProviderType]ports.ExternalProviderPort
 }
 
-// NewRegistry crea un registro vacío.
-func NewRegistry() *Registry {
-	return &Registry{adapters: map[domain.ProviderType]ports.ExternalProviderPort{}}
+// NewProviderPortRegistry crea un registro vacío.
+func NewProviderPortRegistry() *ProviderPortRegistry {
+	return &ProviderPortRegistry{adapters: map[domain.ProviderType]ports.ExternalProviderPort{}}
 }
 
 // Register asocia un adapter con el tipo de proveedor que declara.
-func (r *Registry) Register(adapter ports.ExternalProviderPort) {
+func (r *ProviderPortRegistry) Register(adapter ports.ExternalProviderPort) {
 	r.adapters[adapter.ProviderType()] = adapter
 }
 
 // Adapter devuelve el adapter del tipo indicado.
-func (r *Registry) Adapter(t domain.ProviderType) (ports.ExternalProviderPort, bool) {
+func (r *ProviderPortRegistry) Adapter(t domain.ProviderType) (ports.ExternalProviderPort, bool) {
 	a, ok := r.adapters[t]
 	return a, ok
 }

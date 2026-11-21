@@ -1,5 +1,6 @@
 // Package stubs contiene los sistemas externos simulados, determinísticos, detrás de los puertos reales.
 // [Prototipo] No hay proveedores reales: cada API tiene su propio formato y fallas inyectables.
+// [Prototipo] Las conexiones con proveedores (HTTPS en producción [ADR-12]) se simulan en proceso, sin red ni TLS.
 package stubs
 
 import (

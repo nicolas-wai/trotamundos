@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/permissions/domain"
@@ -25,13 +25,13 @@ func NewQueueItineraryDirectory(data ports.DataGateway) *QueueItineraryDirectory
 
 // Register registra el itinerario con su dueño.
 func (d *QueueItineraryDirectory) Register(ctx context.Context, itineraryID, ownerID string) error {
-	_, err := d.data.Write(ctx, "", operations.DirectoryItineraryRegister, map[string]any{"idItinerario": itineraryID, "idDueno": ownerID})
+	_, err := d.data.Write(ctx, "", resources.DirectoryItineraryRegister, map[string]any{"idItinerario": itineraryID, "idDueno": ownerID})
 	return err
 }
 
 // ResolveOwner devuelve el dueño del itinerario (ErrItineraryNotFound si no existe).
 func (d *QueueItineraryDirectory) ResolveOwner(ctx context.Context, itineraryID string) (string, error) {
-	res, err := d.data.Read(ctx, "", operations.DirectoryItineraryResolve, map[string]any{"idItinerario": itineraryID})
+	res, err := d.data.Read(ctx, "", resources.DirectoryItineraryResolve, map[string]any{"idItinerario": itineraryID})
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +43,7 @@ func (d *QueueItineraryDirectory) ResolveOwner(ctx context.Context, itineraryID 
 
 // Remove elimina la entrada del directorio.
 func (d *QueueItineraryDirectory) Remove(ctx context.Context, itineraryID, ownerID string) error {
-	_, err := d.data.Write(ctx, "", operations.DirectoryItineraryRemove, map[string]any{"idItinerario": itineraryID, "idDueno": ownerID})
+	_, err := d.data.Write(ctx, "", resources.DirectoryItineraryRemove, map[string]any{"idItinerario": itineraryID, "idDueno": ownerID})
 	return err
 }
 
@@ -68,7 +68,7 @@ func (r *QueueSharedItineraryRepository) FindByID(ctx context.Context, itinerary
 		return domain.SharedItinerary{}, err
 	}
 	key := map[string]any{"idItinerario": itineraryID, "idViajero": ownerID}
-	res, err := r.data.Read(ctx, ownerID, operations.ItineraryFind, key)
+	res, err := r.data.Read(ctx, ownerID, resources.ItineraryFind, key)
 	if err != nil {
 		return domain.SharedItinerary{}, err
 	}
@@ -80,13 +80,13 @@ func (r *QueueSharedItineraryRepository) FindByID(ctx context.Context, itinerary
 		Name: str(res.Rows[0], "nombre"), PublicLink: str(res.Rows[0], "link_publico"),
 		ArrangementIDs: []string{},
 	}
-	if res, err = r.data.Read(ctx, ownerID, operations.ItineraryArrangementList, key); err != nil {
+	if res, err = r.data.Read(ctx, ownerID, resources.ItineraryArrangementList, key); err != nil {
 		return domain.SharedItinerary{}, err
 	}
 	for _, row := range res.Rows {
 		it.ArrangementIDs = append(it.ArrangementIDs, str(row, "id_arreglo"))
 	}
-	if res, err = r.data.Read(ctx, ownerID, operations.AccessPermissionList, key); err != nil {
+	if res, err = r.data.Read(ctx, ownerID, resources.AccessPermissionList, key); err != nil {
 		return domain.SharedItinerary{}, err
 	}
 	for _, row := range res.Rows {
@@ -94,7 +94,7 @@ func (r *QueueSharedItineraryRepository) FindByID(ctx context.Context, itinerary
 			AuthorizedTravelerID: str(row, "id_viajero_autorizado"), Active: str(row, "estado") == permissionActive,
 		})
 	}
-	if res, err = r.data.Read(ctx, ownerID, operations.AccessRequestList, key); err != nil {
+	if res, err = r.data.Read(ctx, ownerID, resources.AccessRequestList, key); err != nil {
 		return domain.SharedItinerary{}, err
 	}
 	for _, row := range res.Rows {
@@ -116,7 +116,7 @@ const (
 // Create guarda el itinerario con sus arreglos y lo registra en el directorio. Si un paso falla compensa
 // retirando lo ya escrito para no dejar un itinerario resoluble a medias.
 func (r *QueueSharedItineraryRepository) Create(ctx context.Context, it domain.SharedItinerary) error {
-	_, err := r.data.Write(ctx, it.OwnerID, operations.ItineraryCreate, map[string]any{
+	_, err := r.data.Write(ctx, it.OwnerID, resources.ItineraryCreate, map[string]any{
 		"idItinerario": it.ItineraryID, "idViajero": it.OwnerID, "nombre": it.Name, "linkPublico": it.PublicLink,
 	})
 	if err != nil {
@@ -149,8 +149,8 @@ func (r *QueueSharedItineraryRepository) Delete(ctx context.Context, ownerID, it
 func (r *QueueSharedItineraryRepository) deleteShardRows(ctx context.Context, ownerID, itineraryID string) error {
 	key := map[string]any{"idItinerario": itineraryID, "idViajero": ownerID}
 	for _, resource := range []string{
-		operations.AccessRequestsClear, operations.AccessPermissionsClear,
-		operations.ItineraryArrangementsClear, operations.ItineraryDelete,
+		resources.AccessRequestsClear, resources.AccessPermissionsClear,
+		resources.ItineraryArrangementsClear, resources.ItineraryDelete,
 	} {
 		if _, err := r.data.Write(ctx, ownerID, resource, key); err != nil {
 			return err
@@ -161,7 +161,7 @@ func (r *QueueSharedItineraryRepository) deleteShardRows(ctx context.Context, ow
 
 // AddArrangement agrega la referencia a un arreglo propio (idempotente).
 func (r *QueueSharedItineraryRepository) AddArrangement(ctx context.Context, ownerID, itineraryID, arrangementID string) error {
-	_, err := r.data.Write(ctx, ownerID, operations.ItineraryArrangementAdd, map[string]any{
+	_, err := r.data.Write(ctx, ownerID, resources.ItineraryArrangementAdd, map[string]any{
 		"idItinerario": itineraryID, "idViajero": ownerID, "idArreglo": arrangementID,
 	})
 	return err
@@ -169,7 +169,7 @@ func (r *QueueSharedItineraryRepository) AddArrangement(ctx context.Context, own
 
 // RemoveArrangement quita la referencia a un arreglo.
 func (r *QueueSharedItineraryRepository) RemoveArrangement(ctx context.Context, ownerID, itineraryID, arrangementID string) error {
-	_, err := r.data.Write(ctx, ownerID, operations.ItineraryArrangementRemove, map[string]any{
+	_, err := r.data.Write(ctx, ownerID, resources.ItineraryArrangementRemove, map[string]any{
 		"idItinerario": itineraryID, "idViajero": ownerID, "idArreglo": arrangementID,
 	})
 	return err
@@ -181,7 +181,7 @@ func (r *QueueSharedItineraryRepository) SavePermission(ctx context.Context, own
 	if p.Active {
 		state = permissionActive
 	}
-	_, err := r.data.Write(ctx, ownerID, operations.AccessPermissionSave, map[string]any{
+	_, err := r.data.Write(ctx, ownerID, resources.AccessPermissionSave, map[string]any{
 		"idItinerario": itineraryID, "idViajero": ownerID, "idViajeroAutorizado": p.AuthorizedTravelerID, "estado": state,
 	})
 	return err
@@ -189,7 +189,7 @@ func (r *QueueSharedItineraryRepository) SavePermission(ctx context.Context, own
 
 // SaveRequest crea la solicitud si no existe o actualiza su estado.
 func (r *QueueSharedItineraryRepository) SaveRequest(ctx context.Context, ownerID, itineraryID string, req domain.AccessRequest) error {
-	res, err := r.data.Write(ctx, ownerID, operations.AccessRequestUpdateStatus, map[string]any{
+	res, err := r.data.Write(ctx, ownerID, resources.AccessRequestUpdateStatus, map[string]any{
 		"estado": string(req.Status), "idSolicitud": req.RequestID, "idItinerario": itineraryID, "idViajero": ownerID,
 	})
 	if err != nil {
@@ -198,7 +198,7 @@ func (r *QueueSharedItineraryRepository) SaveRequest(ctx context.Context, ownerI
 	if res.RowsAffected > 0 {
 		return nil
 	}
-	_, err = r.data.Write(ctx, ownerID, operations.AccessRequestCreate, map[string]any{
+	_, err = r.data.Write(ctx, ownerID, resources.AccessRequestCreate, map[string]any{
 		"idSolicitud": req.RequestID, "idItinerario": itineraryID, "idViajero": ownerID,
 		"idSolicitante": req.RequesterTravelerID, "estado": string(req.Status),
 		"fechaSolicitud": req.RequestedAt.UTC().Format(time.RFC3339Nano),
@@ -208,7 +208,7 @@ func (r *QueueSharedItineraryRepository) SaveRequest(ctx context.Context, ownerI
 
 // FindItineraryIDByRequest busca la solicitud dentro del shard del dueño.
 func (r *QueueSharedItineraryRepository) FindItineraryIDByRequest(ctx context.Context, ownerID, requestID string) (string, error) {
-	res, err := r.data.Read(ctx, ownerID, operations.AccessRequestFindItinerary, map[string]any{"idSolicitud": requestID, "idViajero": ownerID})
+	res, err := r.data.Read(ctx, ownerID, resources.AccessRequestFindItinerary, map[string]any{"idSolicitud": requestID, "idViajero": ownerID})
 	if err != nil {
 		return "", err
 	}

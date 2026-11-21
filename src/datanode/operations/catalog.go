@@ -5,6 +5,7 @@ package operations
 import (
 	"fmt"
 
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
@@ -83,134 +84,70 @@ func (c *Catalog) Resolve(resource string, kind Kind) (Operation, error) {
 	return op, nil
 }
 
-// Nombres de recursos de Autenticación (Fase 2).
-const (
-	DirectoryTravelerReserve = "directory.traveler.reserve"
-	DirectoryTravelerLookup  = "directory.traveler.lookup"
-	DirectoryTravelerRelease = "directory.traveler.release"
-	TravelerCreate           = "traveler.create"
-	TravelerFindByID         = "traveler.find_by_id"
-	RefreshTokenSave         = "refresh_token.save"
-	RefreshTokenFind         = "refresh_token.find"
-	RefreshTokenRevoke       = "refresh_token.revoke"
-)
-
-// Nombres de recursos de Arreglos de viaje (Fase 3).
-const (
-	TripCreate                     = "trip.create"
-	TripList                       = "trip.list"
-	TripFindByID                   = "trip.find_by_id"
-	ArrangementListSummaries       = "arrangement.list_summaries"
-	ArrangementFindByID            = "arrangement.find_by_id"
-	ArrangementFindByDeduplication = "arrangement.find_by_deduplication_key"
-	ArrangementSave                = "arrangement.save"
-	ArrangementDelete              = "arrangement.delete"
-)
-
-// Nombres de recursos de la Fase 4 (vinculación de correo, ingesta de proveedores y avisos).
-const (
-	DirectoryTravelerList          = "directory.traveler.list"
-	DirectoryLinkedAccountRegister = "directory.linked_account.register"
-	DirectoryLinkedAccountList     = "directory.linked_account.list"
-	DirectoryLinkedAccountRemove   = "directory.linked_account.remove"
-	DirectoryProviderNoticeSave    = "directory.provider_notice.save"
-	DirectoryProviderNoticeList    = "directory.provider_notice.list"
-	DirectoryProviderNoticeClear   = "directory.provider_notice.clear"
-	LinkedAccountSave              = "linked_account.save"
-	LinkedAccountFind              = "linked_account.find"
-	LinkedAccountDelete            = "linked_account.delete"
-)
-
-// Nombres de recursos de la Fase 5: itinerarios compartidos (Permisos) y recomendaciones.
-const (
-	DirectoryItineraryRegister = "directory.itinerary.register"
-	DirectoryItineraryResolve  = "directory.itinerary.resolve"
-	DirectoryItineraryRemove   = "directory.itinerary.remove"
-	ItineraryCreate            = "itinerary.create"
-	ItineraryFind              = "itinerary.find"
-	ItineraryDelete            = "itinerary.delete"
-	ItineraryArrangementAdd    = "itinerary.arrangement.add"
-	ItineraryArrangementRemove = "itinerary.arrangement.remove"
-	ItineraryArrangementList   = "itinerary.arrangement.list"
-	ItineraryArrangementsClear = "itinerary.arrangement.clear"
-	AccessPermissionSave       = "access_permission.save"
-	AccessPermissionList       = "access_permission.list"
-	AccessPermissionsClear     = "access_permission.clear"
-	AccessRequestCreate        = "access_request.create"
-	AccessRequestList          = "access_request.list"
-	AccessRequestFindItinerary = "access_request.find_itinerary"
-	AccessRequestUpdateStatus  = "access_request.update_status"
-	AccessRequestsClear        = "access_request.clear"
-	PreferencesGet             = "preferences.get"
-	PreferencesSave            = "preferences.save"
-	RecommendationFeedbackSave = "recommendation_feedback.save"
-	RecommendationFeedbackList = "recommendation_feedback.list"
-)
-
 // DefaultCatalog devuelve el catálogo con las operaciones de las Fases 2 (Autenticación), 3 (Arreglos de viaje), 4 (Integraciones) y 5 (Permisos y Recomendaciones).
 func DefaultCatalog() *Catalog {
 	c := NewCatalog()
 	for _, op := range []Operation{
-		{DirectoryTravelerReserve, Write, ScopeDirectory, `INSERT INTO traveler_directory (email, id_viajero) VALUES (?, ?)`, []string{"email", "idViajero"}, "PERFIL"},
-		{DirectoryTravelerLookup, Read, ScopeDirectory, `SELECT id_viajero FROM traveler_directory WHERE email = ?`, []string{"email"}, ""},
-		{DirectoryTravelerRelease, Write, ScopeDirectory, `DELETE FROM traveler_directory WHERE email = ? AND id_viajero = ?`, []string{"email", "idViajero"}, "PERFIL"},
-		{TravelerCreate, Write, ScopeShard, `INSERT INTO travelers (id_viajero, email, encrypted_password, created_at) VALUES (?, ?, ?, ?)`, []string{"idViajero", "email", "encryptedPassword", "createdAt"}, "PERFIL"},
-		{TravelerFindByID, Read, ScopeShard, `SELECT id_viajero, email, encrypted_password, created_at FROM travelers WHERE id_viajero = ?`, []string{"idViajero"}, ""},
-		{RefreshTokenSave, Write, ScopeShard, `INSERT INTO refresh_tokens (token_id, id_viajero, expires_at, revoked) VALUES (?, ?, ?, 0)`, []string{"tokenId", "idViajero", "expiresAt"}, "PERFIL"},
-		{RefreshTokenFind, Read, ScopeShard, `SELECT token_id, id_viajero, expires_at, revoked FROM refresh_tokens WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, ""},
-		{RefreshTokenRevoke, Write, ScopeShard, `UPDATE refresh_tokens SET revoked = 1 WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, "PERFIL"},
+		{resources.DirectoryTravelerReserve, Write, ScopeDirectory, `INSERT INTO traveler_directory (email, id_viajero) VALUES (?, ?)`, []string{"email", "idViajero"}, "PERFIL"},
+		{resources.DirectoryTravelerLookup, Read, ScopeDirectory, `SELECT id_viajero FROM traveler_directory WHERE email = ?`, []string{"email"}, ""},
+		{resources.DirectoryTravelerRelease, Write, ScopeDirectory, `DELETE FROM traveler_directory WHERE email = ? AND id_viajero = ?`, []string{"email", "idViajero"}, "PERFIL"},
+		{resources.TravelerCreate, Write, ScopeShard, `INSERT INTO travelers (id_viajero, email, encrypted_password, created_at) VALUES (?, ?, ?, ?)`, []string{"idViajero", "email", "encryptedPassword", "createdAt"}, "PERFIL"},
+		{resources.TravelerFindByID, Read, ScopeShard, `SELECT id_viajero, email, encrypted_password, created_at FROM travelers WHERE id_viajero = ?`, []string{"idViajero"}, ""},
+		{resources.RefreshTokenSave, Write, ScopeShard, `INSERT INTO refresh_tokens (token_id, id_viajero, expires_at, revoked) VALUES (?, ?, ?, 0)`, []string{"tokenId", "idViajero", "expiresAt"}, "PERFIL"},
+		{resources.RefreshTokenFind, Read, ScopeShard, `SELECT token_id, id_viajero, expires_at, revoked FROM refresh_tokens WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, ""},
+		{resources.RefreshTokenRevoke, Write, ScopeShard, `UPDATE refresh_tokens SET revoked = 1 WHERE token_id = ? AND id_viajero = ?`, []string{"tokenId", "idViajero"}, "PERFIL"},
 
 		// Arreglos de viaje (Fase 3). Todas filtran por id_viajero además del id del recurso: un viajero
 		// nunca alcanza datos de otro. El SQL es determinístico porque la réplica de lectura lo reejecuta (ADR-10).
-		{TripCreate, Write, ScopeShard, `INSERT OR IGNORE INTO trips (id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`, []string{"idViaje", "idViajero", "nombre", "destino", "fechaInicio", "fechaFin", "estado"}, "VIAJE"},
-		{TripList, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viajero = ? ORDER BY fecha_inicio, id_viaje`, []string{"idViajero"}, ""},
-		{TripFindByID, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viaje = ? AND id_viajero = ?`, []string{"idViaje", "idViajero"}, ""},
+		{resources.TripCreate, Write, ScopeShard, `INSERT OR IGNORE INTO trips (id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`, []string{"idViaje", "idViajero", "nombre", "destino", "fechaInicio", "fechaFin", "estado"}, "VIAJE"},
+		{resources.TripList, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viajero = ? ORDER BY fecha_inicio, id_viaje`, []string{"idViajero"}, ""},
+		{resources.TripFindByID, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viaje = ? AND id_viajero = ?`, []string{"idViaje", "idViajero"}, ""},
 		// Dashboard: solo columnas críticas, sin detalle ni remitente [ADR-17].
-		{ArrangementListSummaries, Read, ScopeShard, `SELECT id_arreglo, id_viaje, tipo, titulo, origen, estado, fecha_inicio, fecha_fin FROM arrangements WHERE id_viajero = ? ORDER BY fecha_inicio, id_arreglo`, []string{"idViajero"}, ""},
-		{ArrangementFindByID, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, ""},
-		{ArrangementFindByDeduplication, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE clave_deduplicacion = ? AND id_viajero = ?`, []string{"claveDeduplicacion", "idViajero"}, ""},
-		{ArrangementSave, Write, ScopeShard, `INSERT INTO arrangements (id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_arreglo) DO UPDATE SET id_viaje = excluded.id_viaje, tipo = excluded.tipo, titulo = excluded.titulo, origen = excluded.origen, remitente = excluded.remitente, estado = excluded.estado, detalle = excluded.detalle, clave_deduplicacion = excluded.clave_deduplicacion, fecha_inicio = excluded.fecha_inicio, fecha_fin = excluded.fecha_fin, generado_en_fuente = excluded.generado_en_fuente, recibido_en = excluded.recibido_en, actualizado_en = excluded.actualizado_en WHERE arrangements.id_viajero = excluded.id_viajero`, []string{"idArreglo", "idViaje", "idViajero", "tipo", "titulo", "origen", "remitente", "estado", "detalle", "claveDeduplicacion", "fechaInicio", "fechaFin", "generadoEnFuente", "recibidoEn", "actualizadoEn"}, "ARREGLO"},
-		{ArrangementDelete, Write, ScopeShard, `DELETE FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, "ARREGLO"},
+		{resources.ArrangementListSummaries, Read, ScopeShard, `SELECT id_arreglo, id_viaje, tipo, titulo, origen, estado, fecha_inicio, fecha_fin FROM arrangements WHERE id_viajero = ? ORDER BY fecha_inicio, id_arreglo`, []string{"idViajero"}, ""},
+		{resources.ArrangementFindByID, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, ""},
+		{resources.ArrangementFindByDeduplication, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE clave_deduplicacion = ? AND id_viajero = ?`, []string{"claveDeduplicacion", "idViajero"}, ""},
+		{resources.ArrangementSave, Write, ScopeShard, `INSERT INTO arrangements (id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_arreglo) DO UPDATE SET id_viaje = excluded.id_viaje, tipo = excluded.tipo, titulo = excluded.titulo, origen = excluded.origen, remitente = excluded.remitente, estado = excluded.estado, detalle = excluded.detalle, clave_deduplicacion = excluded.clave_deduplicacion, fecha_inicio = excluded.fecha_inicio, fecha_fin = excluded.fecha_fin, generado_en_fuente = excluded.generado_en_fuente, recibido_en = excluded.recibido_en, actualizado_en = excluded.actualizado_en WHERE arrangements.id_viajero = excluded.id_viajero`, []string{"idArreglo", "idViaje", "idViajero", "tipo", "titulo", "origen", "remitente", "estado", "detalle", "claveDeduplicacion", "fechaInicio", "fechaFin", "generadoEnFuente", "recibidoEn", "actualizadoEn"}, "ARREGLO"},
+		{resources.ArrangementDelete, Write, ScopeShard, `DELETE FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, "ARREGLO"},
 
 		// Fase 4: directorio de viajeros y cuentas vinculadas (lo recorre el planificador de sondeo) y avisos E2.
-		{DirectoryTravelerList, Read, ScopeDirectory, `SELECT id_viajero FROM traveler_directory ORDER BY id_viajero`, nil, ""},
-		{DirectoryLinkedAccountRegister, Write, ScopeDirectory, `INSERT OR REPLACE INTO linked_account_directory (id_cuenta, id_viajero, proveedor) VALUES (?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor"}, "PERFIL"},
-		{DirectoryLinkedAccountList, Read, ScopeDirectory, `SELECT id_cuenta, id_viajero, proveedor FROM linked_account_directory ORDER BY id_cuenta`, nil, ""},
-		{DirectoryLinkedAccountRemove, Write, ScopeDirectory, `DELETE FROM linked_account_directory WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
-		{DirectoryProviderNoticeSave, Write, ScopeDirectory, `INSERT OR REPLACE INTO provider_notices (id_proveedor, id_viajero, mensaje, proximo_intento) VALUES (?, ?, ?, ?)`, []string{"idProveedor", "idViajero", "mensaje", "proximoIntento"}, "PERFIL"},
-		{DirectoryProviderNoticeList, Read, ScopeDirectory, `SELECT id_proveedor, id_viajero, mensaje, proximo_intento FROM provider_notices ORDER BY id_proveedor`, nil, ""},
-		{DirectoryProviderNoticeClear, Write, ScopeDirectory, `DELETE FROM provider_notices WHERE id_proveedor = ?`, []string{"idProveedor"}, "PERFIL"},
+		{resources.DirectoryTravelerList, Read, ScopeDirectory, `SELECT id_viajero FROM traveler_directory ORDER BY id_viajero`, nil, ""},
+		{resources.DirectoryLinkedAccountRegister, Write, ScopeDirectory, `INSERT OR REPLACE INTO linked_account_directory (id_cuenta, id_viajero, proveedor) VALUES (?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor"}, "PERFIL"},
+		{resources.DirectoryLinkedAccountList, Read, ScopeDirectory, `SELECT id_cuenta, id_viajero, proveedor FROM linked_account_directory ORDER BY id_cuenta`, nil, ""},
+		{resources.DirectoryLinkedAccountRemove, Write, ScopeDirectory, `DELETE FROM linked_account_directory WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
+		{resources.DirectoryProviderNoticeSave, Write, ScopeDirectory, `INSERT OR REPLACE INTO provider_notices (id_proveedor, id_viajero, mensaje, proximo_intento) VALUES (?, ?, ?, ?)`, []string{"idProveedor", "idViajero", "mensaje", "proximoIntento"}, "PERFIL"},
+		{resources.DirectoryProviderNoticeList, Read, ScopeDirectory, `SELECT id_proveedor, id_viajero, mensaje, proximo_intento FROM provider_notices ORDER BY id_proveedor`, nil, ""},
+		{resources.DirectoryProviderNoticeClear, Write, ScopeDirectory, `DELETE FROM provider_notices WHERE id_proveedor = ?`, []string{"idProveedor"}, "PERFIL"},
 		// Cuentas de correo vinculadas (tokens OAuth cifrados, en base64) en el shard del viajero [ADR-15].
-		{LinkedAccountSave, Write, ScopeShard, `INSERT OR REPLACE INTO linked_email_accounts (id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor", "encryptedAccessToken", "encryptedRefreshToken", "estado"}, "PERFIL"},
-		{LinkedAccountFind, Read, ScopeShard, `SELECT id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, ""},
-		{LinkedAccountDelete, Write, ScopeShard, `DELETE FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
+		{resources.LinkedAccountSave, Write, ScopeShard, `INSERT OR REPLACE INTO linked_email_accounts (id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor", "encryptedAccessToken", "encryptedRefreshToken", "estado"}, "PERFIL"},
+		{resources.LinkedAccountFind, Read, ScopeShard, `SELECT id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, ""},
+		{resources.LinkedAccountDelete, Write, ScopeShard, `DELETE FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
 
 		// Fase 5 — Itinerarios compartidos [ADR-13][ADR-11]. El directorio ◇ resuelve el shard del dueño a partir de
 		// idItinerario; el resto vive en el shard del dueño y siempre filtra por id_viajero (= dueño).
-		{DirectoryItineraryRegister, Write, ScopeDirectory, `INSERT INTO itinerary_directory (id_itinerario, id_viajero_dueno) VALUES (?, ?)`, []string{"idItinerario", "idDueno"}, "PERMISO"},
-		{DirectoryItineraryResolve, Read, ScopeDirectory, `SELECT id_viajero_dueno FROM itinerary_directory WHERE id_itinerario = ?`, []string{"idItinerario"}, ""},
-		{DirectoryItineraryRemove, Write, ScopeDirectory, `DELETE FROM itinerary_directory WHERE id_itinerario = ? AND id_viajero_dueno = ?`, []string{"idItinerario", "idDueno"}, "PERMISO"},
-		{ItineraryCreate, Write, ScopeShard, `INSERT INTO shared_itineraries (id_itinerario, id_viajero, nombre, link_publico) VALUES (?, ?, ?, ?)`, []string{"idItinerario", "idViajero", "nombre", "linkPublico"}, "PERMISO"},
-		{ItineraryFind, Read, ScopeShard, `SELECT id_itinerario, id_viajero, nombre, link_publico FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, ""},
-		{ItineraryDelete, Write, ScopeShard, `DELETE FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
-		{ItineraryArrangementAdd, Write, ScopeShard, `INSERT OR IGNORE INTO itinerary_arrangements (id_itinerario, id_viajero, id_arreglo) VALUES (?, ?, ?)`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},
-		{ItineraryArrangementRemove, Write, ScopeShard, `DELETE FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ? AND id_arreglo = ?`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},
-		{ItineraryArrangementList, Read, ScopeShard, `SELECT id_arreglo FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ? ORDER BY id_arreglo`, []string{"idItinerario", "idViajero"}, ""},
-		{ItineraryArrangementsClear, Write, ScopeShard, `DELETE FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
-		{AccessPermissionSave, Write, ScopeShard, `INSERT INTO access_permissions (id_itinerario, id_viajero, id_viajero_autorizado, estado) VALUES (?, ?, ?, ?) ON CONFLICT(id_itinerario, id_viajero_autorizado) DO UPDATE SET estado = excluded.estado`, []string{"idItinerario", "idViajero", "idViajeroAutorizado", "estado"}, "PERMISO"},
-		{AccessPermissionList, Read, ScopeShard, `SELECT id_viajero_autorizado, estado FROM access_permissions WHERE id_itinerario = ? AND id_viajero = ? ORDER BY id_viajero_autorizado`, []string{"idItinerario", "idViajero"}, ""},
-		{AccessPermissionsClear, Write, ScopeShard, `DELETE FROM access_permissions WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
-		{AccessRequestCreate, Write, ScopeShard, `INSERT INTO access_requests (id_solicitud, id_itinerario, id_viajero, id_viajero_solicitante, estado, fecha_solicitud) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idSolicitud", "idItinerario", "idViajero", "idSolicitante", "estado", "fechaSolicitud"}, "PERMISO"},
-		{AccessRequestList, Read, ScopeShard, `SELECT id_solicitud, id_viajero_solicitante, estado, fecha_solicitud FROM access_requests WHERE id_itinerario = ? AND id_viajero = ? ORDER BY fecha_solicitud, id_solicitud`, []string{"idItinerario", "idViajero"}, ""},
-		{AccessRequestFindItinerary, Read, ScopeShard, `SELECT id_itinerario FROM access_requests WHERE id_solicitud = ? AND id_viajero = ?`, []string{"idSolicitud", "idViajero"}, ""},
-		{AccessRequestUpdateStatus, Write, ScopeShard, `UPDATE access_requests SET estado = ? WHERE id_solicitud = ? AND id_itinerario = ? AND id_viajero = ?`, []string{"estado", "idSolicitud", "idItinerario", "idViajero"}, "PERMISO"},
-		{AccessRequestsClear, Write, ScopeShard, `DELETE FROM access_requests WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
+		{resources.DirectoryItineraryRegister, Write, ScopeDirectory, `INSERT INTO itinerary_directory (id_itinerario, id_viajero_dueno) VALUES (?, ?)`, []string{"idItinerario", "idDueno"}, "PERMISO"},
+		{resources.DirectoryItineraryResolve, Read, ScopeDirectory, `SELECT id_viajero_dueno FROM itinerary_directory WHERE id_itinerario = ?`, []string{"idItinerario"}, ""},
+		{resources.DirectoryItineraryRemove, Write, ScopeDirectory, `DELETE FROM itinerary_directory WHERE id_itinerario = ? AND id_viajero_dueno = ?`, []string{"idItinerario", "idDueno"}, "PERMISO"},
+		{resources.ItineraryCreate, Write, ScopeShard, `INSERT INTO shared_itineraries (id_itinerario, id_viajero, nombre, link_publico) VALUES (?, ?, ?, ?)`, []string{"idItinerario", "idViajero", "nombre", "linkPublico"}, "PERMISO"},
+		{resources.ItineraryFind, Read, ScopeShard, `SELECT id_itinerario, id_viajero, nombre, link_publico FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, ""},
+		{resources.ItineraryDelete, Write, ScopeShard, `DELETE FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
+		{resources.ItineraryArrangementAdd, Write, ScopeShard, `INSERT OR IGNORE INTO itinerary_arrangements (id_itinerario, id_viajero, id_arreglo) VALUES (?, ?, ?)`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},
+		{resources.ItineraryArrangementRemove, Write, ScopeShard, `DELETE FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ? AND id_arreglo = ?`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},
+		{resources.ItineraryArrangementList, Read, ScopeShard, `SELECT id_arreglo FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ? ORDER BY id_arreglo`, []string{"idItinerario", "idViajero"}, ""},
+		{resources.ItineraryArrangementsClear, Write, ScopeShard, `DELETE FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
+		{resources.AccessPermissionSave, Write, ScopeShard, `INSERT INTO access_permissions (id_itinerario, id_viajero, id_viajero_autorizado, estado) VALUES (?, ?, ?, ?) ON CONFLICT(id_itinerario, id_viajero_autorizado) DO UPDATE SET estado = excluded.estado`, []string{"idItinerario", "idViajero", "idViajeroAutorizado", "estado"}, "PERMISO"},
+		{resources.AccessPermissionList, Read, ScopeShard, `SELECT id_viajero_autorizado, estado FROM access_permissions WHERE id_itinerario = ? AND id_viajero = ? ORDER BY id_viajero_autorizado`, []string{"idItinerario", "idViajero"}, ""},
+		{resources.AccessPermissionsClear, Write, ScopeShard, `DELETE FROM access_permissions WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
+		{resources.AccessRequestCreate, Write, ScopeShard, `INSERT INTO access_requests (id_solicitud, id_itinerario, id_viajero, id_viajero_solicitante, estado, fecha_solicitud) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idSolicitud", "idItinerario", "idViajero", "idSolicitante", "estado", "fechaSolicitud"}, "PERMISO"},
+		{resources.AccessRequestList, Read, ScopeShard, `SELECT id_solicitud, id_viajero_solicitante, estado, fecha_solicitud FROM access_requests WHERE id_itinerario = ? AND id_viajero = ? ORDER BY fecha_solicitud, id_solicitud`, []string{"idItinerario", "idViajero"}, ""},
+		{resources.AccessRequestFindItinerary, Read, ScopeShard, `SELECT id_itinerario FROM access_requests WHERE id_solicitud = ? AND id_viajero = ?`, []string{"idSolicitud", "idViajero"}, ""},
+		{resources.AccessRequestUpdateStatus, Write, ScopeShard, `UPDATE access_requests SET estado = ? WHERE id_solicitud = ? AND id_itinerario = ? AND id_viajero = ?`, []string{"estado", "idSolicitud", "idItinerario", "idViajero"}, "PERMISO"},
+		{resources.AccessRequestsClear, Write, ScopeShard, `DELETE FROM access_requests WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
 
 		// Fase 5 — Recomendaciones [ADR-24][ADR-25]. Preferencias del perfil y feedback HITL (historial).
-		{PreferencesGet, Read, ScopeShard, `SELECT recommendation_params, accommodation_preferences, transport_preferences, route_preferences FROM preferences WHERE id_viajero = ?`, []string{"idViajero"}, ""},
-		{PreferencesSave, Write, ScopeShard, `INSERT INTO preferences (id_viajero, recommendation_params, accommodation_preferences, transport_preferences, route_preferences) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id_viajero) DO UPDATE SET recommendation_params = excluded.recommendation_params, accommodation_preferences = excluded.accommodation_preferences, transport_preferences = excluded.transport_preferences, route_preferences = excluded.route_preferences`, []string{"idViajero", "recommendationParams", "accommodationPreferences", "transportPreferences", "routePreferences"}, "PERFIL"},
-		{RecommendationFeedbackSave, Write, ScopeShard, `INSERT INTO recommendation_feedback (id_feedback, id_recomendacion, id_viajero, accion, parametros_ajustados, fecha) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idFeedback", "idRecomendacion", "idViajero", "accion", "parametrosAjustados", "fecha"}, "PERFIL"},
-		{RecommendationFeedbackList, Read, ScopeShard, `SELECT id_feedback, id_recomendacion, accion, parametros_ajustados, fecha FROM recommendation_feedback WHERE id_viajero = ? ORDER BY fecha, id_feedback`, []string{"idViajero"}, ""},
+		{resources.PreferencesGet, Read, ScopeShard, `SELECT recommendation_params, accommodation_preferences, transport_preferences, route_preferences FROM preferences WHERE id_viajero = ?`, []string{"idViajero"}, ""},
+		{resources.PreferencesSave, Write, ScopeShard, `INSERT INTO preferences (id_viajero, recommendation_params, accommodation_preferences, transport_preferences, route_preferences) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id_viajero) DO UPDATE SET recommendation_params = excluded.recommendation_params, accommodation_preferences = excluded.accommodation_preferences, transport_preferences = excluded.transport_preferences, route_preferences = excluded.route_preferences`, []string{"idViajero", "recommendationParams", "accommodationPreferences", "transportPreferences", "routePreferences"}, "PERFIL"},
+		{resources.RecommendationFeedbackSave, Write, ScopeShard, `INSERT INTO recommendation_feedback (id_feedback, id_recomendacion, id_viajero, accion, parametros_ajustados, fecha) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idFeedback", "idRecomendacion", "idViajero", "accion", "parametrosAjustados", "fecha"}, "PERFIL"},
+		{resources.RecommendationFeedbackList, Read, ScopeShard, `SELECT id_feedback, id_recomendacion, accion, parametros_ajustados, fecha FROM recommendation_feedback WHERE id_viajero = ? ORDER BY fecha, id_feedback`, []string{"idViajero"}, ""},
 	} {
 		c.Register(op)
 	}

@@ -18,26 +18,28 @@ type Submitter interface {
 	Submit(ctx context.Context, op events.QueuedOperation) (ports.Future, error)
 }
 
-// Client [ADR-09][ADR-11] Encola toda operación de datos de la réplica como E8 con su tipo
+// PriorityQueueClient [ADR-09][ADR-11] Encola toda operación de datos de la réplica como E8 con su tipo
 // (lectura/escritura). idViajero lo entrega la capa de aplicación tomándolo del token, nunca del body.
-type Client struct {
+type PriorityQueueClient struct {
 	submitter Submitter
 	now       func() time.Time
 }
 
 var (
-	_ ports.PriorityQueuePort = (*Client)(nil)
-	_ ports.DataGateway       = (*Client)(nil)
+	_ ports.PriorityQueuePort = (*PriorityQueueClient)(nil)
+	_ ports.DataGateway       = (*PriorityQueueClient)(nil)
 )
 
-// NewClient crea el cliente de cola sobre el nodo de cola de prioridades.
-func NewClient(submitter Submitter) *Client { return &Client{submitter: submitter, now: time.Now} }
+// NewPriorityQueueClient crea el cliente de cola sobre el nodo de cola de prioridades.
+func NewPriorityQueueClient(submitter Submitter) *PriorityQueueClient {
+	return &PriorityQueueClient{submitter: submitter, now: time.Now}
+}
 
 // SetClock inyecta el reloj (pruebas).
-func (c *Client) SetClock(now func() time.Time) { c.now = now }
+func (c *PriorityQueueClient) SetClock(now func() time.Time) { c.now = now }
 
 // Enqueue encola la operación y devuelve su resultado diferido.
-func (c *Client) Enqueue(ctx context.Context, op events.QueuedOperation) (ports.Future, error) {
+func (c *PriorityQueueClient) Enqueue(ctx context.Context, op events.QueuedOperation) (ports.Future, error) {
 	if c.submitter == nil {
 		return nil, errors.New("cliente de cola sin nodo de cola de prioridades")
 	}
@@ -45,16 +47,16 @@ func (c *Client) Enqueue(ctx context.Context, op events.QueuedOperation) (ports.
 }
 
 // Read arma una operación E8 de LECTURA (prioridad alta), la encola y espera el resultado.
-func (c *Client) Read(ctx context.Context, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
+func (c *PriorityQueueClient) Read(ctx context.Context, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
 	return c.run(ctx, events.OperationRead, 1, travelerID, resource, params)
 }
 
 // Write arma una operación E8 de ESCRITURA (prioridad baja), la encola y espera el resultado.
-func (c *Client) Write(ctx context.Context, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
+func (c *PriorityQueueClient) Write(ctx context.Context, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
 	return c.run(ctx, events.OperationWrite, 2, travelerID, resource, params)
 }
 
-func (c *Client) run(ctx context.Context, kind string, priority int, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
+func (c *PriorityQueueClient) run(ctx context.Context, kind string, priority int, travelerID, resource string, params map[string]any) (ports.DataResult, error) {
 	fut, err := c.Enqueue(ctx, events.QueuedOperation{
 		OperacionID: newUUID(), Tipo: kind, Prioridad: priority, IDViajero: travelerID,
 		Recurso: resource, Payload: params, EncoladaEn: c.now().UTC(),

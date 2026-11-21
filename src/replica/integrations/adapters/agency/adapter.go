@@ -19,20 +19,20 @@ type Client interface {
 	Bookings(ctx context.Context, travelerID string, since time.Time) ([]byte, error)
 }
 
-// Adapter implementa ports.ExternalProviderPort para proveedores de tipo AGENCIA: traduce el JSON anidado de la
+// AgencyAdapter implementa ports.ExternalProviderPort para proveedores de tipo AGENCIA: traduce el JSON anidado de la
 // agencia (reservas → producto → fechas) al modelo del puerto. [ADR-05][QA-14]
-type Adapter struct{ client Client }
+type AgencyAdapter struct{ client Client }
 
-var _ ports.ExternalProviderPort = (*Adapter)(nil)
+var _ ports.ExternalProviderPort = (*AgencyAdapter)(nil)
 
-// NewAdapter crea el adapter.
-func NewAdapter(client Client) *Adapter { return &Adapter{client: client} }
+// NewAgencyAdapter crea el adapter.
+func NewAgencyAdapter(client Client) *AgencyAdapter { return &AgencyAdapter{client: client} }
 
 // ProviderType devuelve el tipo de proveedor que atiende.
-func (*Adapter) ProviderType() domain.ProviderType { return domain.ProviderAgency }
+func (*AgencyAdapter) ProviderType() domain.ProviderType { return domain.ProviderAgency }
 
 // Poll sondea la agencia y traduce su respuesta.
-func (a *Adapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
+func (a *AgencyAdapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
 	raw, err := a.client.Bookings(ctx, ref.TravelerID, since)
 	if err != nil {
 		return nil, providerport.ClassifyError(err)

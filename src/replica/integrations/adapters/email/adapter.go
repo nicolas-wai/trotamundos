@@ -23,26 +23,26 @@ type TokenResolver interface {
 	AccessToken(ctx context.Context, travelerID, accountID string) (string, error)
 }
 
-// Adapter implementa ports.ExternalProviderPort para proveedores de tipo EMAIL: traduce los correos de reserva
+// EmailAdapter implementa ports.ExternalProviderPort para proveedores de tipo EMAIL: traduce los correos de reserva
 // (texto semiestructurado "Campo: valor", con remitente) al modelo del puerto. [ADR-05][QA-15]
-type Adapter struct {
+type EmailAdapter struct {
 	client MailClient
 	tokens TokenResolver
 }
 
-var _ ports.ExternalProviderPort = (*Adapter)(nil)
+var _ ports.ExternalProviderPort = (*EmailAdapter)(nil)
 
-// NewAdapter crea el adapter.
-func NewAdapter(client MailClient, tokens TokenResolver) *Adapter {
-	return &Adapter{client: client, tokens: tokens}
+// NewEmailAdapter crea el adapter.
+func NewEmailAdapter(client MailClient, tokens TokenResolver) *EmailAdapter {
+	return &EmailAdapter{client: client, tokens: tokens}
 }
 
 // ProviderType devuelve el tipo de proveedor que atiende.
-func (*Adapter) ProviderType() domain.ProviderType { return domain.ProviderEmail }
+func (*EmailAdapter) ProviderType() domain.ProviderType { return domain.ProviderEmail }
 
 // Poll sondea el correo de la cuenta vinculada y traduce los mensajes. Errores: ErrProviderUnavailable,
 // ErrInvalidCredential (token rechazado o cuenta sin tokens) y ErrUnparseableResponse.
-func (a *Adapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
+func (a *EmailAdapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
 	token, err := a.tokens.AccessToken(ctx, ref.TravelerID, ref.AccountID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ports.ErrInvalidCredential, err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 )
@@ -19,7 +20,7 @@ const maxBodyBytes = 1 << 20
 // decodeJSON lee el body JSON; responde 400 y devuelve false si es malformado.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(dst); err != nil {
-		apierror.WriteError(w, http.StatusBadRequest, apierror.ValidacionFallida, "El cuerpo de la solicitud no es un JSON válido")
+		httpresponse.WriteError(w, http.StatusBadRequest, apierror.ValidacionFallida, "El cuerpo de la solicitud no es un JSON válido")
 		return false
 	}
 	return true
@@ -29,17 +30,17 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 func writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, authapp.ErrValidation):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, authapp.ErrEmailTaken):
-		apierror.WriteError(w, http.StatusConflict, apierror.Conflicto, "El email ya está registrado")
+		httpresponse.WriteError(w, http.StatusConflict, apierror.Conflicto, "El email ya está registrado")
 	case errors.Is(err, authapp.ErrInvalidCredentials):
-		apierror.WriteError(w, http.StatusUnauthorized, apierror.CredencialesInvalidas, "Email o contraseña incorrectos")
+		httpresponse.WriteError(w, http.StatusUnauthorized, apierror.CredencialesInvalidas, "Email o contraseña incorrectos")
 	case errors.Is(err, ports.ErrRefreshRevokedOrExpired):
-		apierror.WriteError(w, http.StatusUnauthorized, apierror.RefreshRevocadoOExpirado, "El refresh token fue revocado o expiró")
+		httpresponse.WriteError(w, http.StatusUnauthorized, apierror.RefreshRevocadoOExpirado, "El refresh token fue revocado o expiró")
 	case errors.Is(err, ports.ErrDataNodeUnavailable), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
 	default:
-		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 	}
 }
 
@@ -54,7 +55,7 @@ func (c *Controllers) Login(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusOK, httpdto.LoginResponse{
+	httpresponse.WriteJSON(w, http.StatusOK, httpdto.LoginResponse{
 		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn, TokenType: "Bearer",
 	})
 }
@@ -70,7 +71,7 @@ func (c *Controllers) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusOK, httpdto.RefreshResponse{AccessToken: at.Token, ExpiresIn: at.ExpiresIn, TokenType: "Bearer"})
+	httpresponse.WriteJSON(w, http.StatusOK, httpdto.RefreshResponse{AccessToken: at.Token, ExpiresIn: at.ExpiresIn, TokenType: "Bearer"})
 }
 
 // Logout atiende POST /logout.
@@ -97,5 +98,5 @@ func (c *Controllers) Register(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusCreated, httpdto.RegisterResponse{IDViajero: id})
+	httpresponse.WriteJSON(w, http.StatusCreated, httpdto.RegisterResponse{IDViajero: id})
 }

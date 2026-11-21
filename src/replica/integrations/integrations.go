@@ -32,7 +32,7 @@ type Config struct {
 
 // Module agrupa los componentes de Integraciones externas de una réplica.
 type Module struct {
-	Registry  *providerport.Registry
+	Registry  *providerport.ProviderPortRegistry
 	Breaker   *circuitbreaker.ProviderCircuitBreaker
 	Broker    *broker.Broker
 	Scheduler *scheduler.PollingScheduler
@@ -41,10 +41,10 @@ type Module struct {
 // NewModule arma el módulo: registra un adapter por tipo de proveedor en el puerto único [QA-10][QA-14] y conecta
 // planificador → circuit breaker → adapter → broker → cola P2P.
 func NewModule(cfg Config, queue ports.MessageQueuePort, bus ports.EventBusPort, data ports.DataGateway, tokens email.TokenResolver, clients Clients) *Module {
-	registry := providerport.NewRegistry()
-	registry.Register(email.NewAdapter(clients.Mail, tokens))
-	registry.Register(agency.NewAdapter(clients.Agency))
-	registry.Register(travelsystem.NewAdapter(clients.TravelSystem))
+	registry := providerport.NewProviderPortRegistry()
+	registry.Register(email.NewEmailAdapter(clients.Mail, tokens))
+	registry.Register(agency.NewAgencyAdapter(clients.Agency))
+	registry.Register(travelsystem.NewTravelSystemAdapter(clients.TravelSystem))
 
 	breaker := circuitbreaker.NewProviderCircuitBreaker(bus).WithConfig(cfg.Breaker)
 	brk := broker.NewBroker(queue)

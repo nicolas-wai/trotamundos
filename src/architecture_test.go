@@ -1,5 +1,6 @@
 // Package src contiene el test de arquitectura del prototipo: verifica por análisis estático de imports
-// que se respeta la regla de dependencias (concern de tecnologías genéricas) y el mapeo 1 a 1 con AD §3/§4.
+// que se respeta la regla de dependencias (concern de tecnologías genéricas, también de forma transitiva),
+// las fronteras entre contenedores y entre módulos del monolito (ADR-02) y el mapeo 1 a 1 con AD §3/§4.
 package src
 
 import (
@@ -54,10 +55,15 @@ func checkCoreImports(root string) ([]string, error) {
 	return violations, err
 }
 
+// isForbiddenStdlib: paquetes de la biblioteca estándar que atan al núcleo a una tecnología concreta (HTTP, SQL).
+func isForbiddenStdlib(p string) bool {
+	return p == "net/http" || strings.HasPrefix(p, "net/http/") || p == "database/sql" || strings.HasPrefix(p, "database/sql/")
+}
+
 func allowedImport(p, moduleDir string) bool {
 	first, _, _ := strings.Cut(p, "/")
 	if !strings.Contains(first, ".") { // biblioteca estándar
-		return p != "net/http" && !strings.HasPrefix(p, "net/http/")
+		return !isForbiddenStdlib(p)
 	}
 	switch {
 	case p == modulePath+"/ports":
@@ -116,7 +122,7 @@ import (
 // Mapeo 1 a 1 con los contenedores y componentes de AD §3 y §4 (ImplementationPlan §0.3).
 func TestDirectoryLayoutMatchesArchitecture(t *testing.T) {
 	required := []string{
-		"config", "contracts/httpdto", "contracts/apierror", "contracts/events", "ports",
+		"config", "contracts/httpdto", "contracts/apierror", "contracts/events", "contracts/resources", "httpresponse", "ports",
 		"client/web/templates", "client/web/static",
 		"loadbalancer", "messagequeue", "priorityqueue",
 		"datanode/cache", "datanode/primary", "datanode/readreplica", "datanode/schema", "datanode/operations",
@@ -188,5 +194,246 @@ func TestPortsDoNotImportStubsOrAdapters(t *testing.T) {
 				t.Errorf("ports/%s importa %q", e.Name(), p)
 			}
 		}
+	}
+}
+
+// importsOfDir devuelve los imports (sin duplicados) de los .go de un directorio, sin contar los _test.go.
+func importsOfDir(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, e.Name()), nil, parser.ImportsOnly)
+		if err != nil {
+			return nil, err
+		}
+		for _, imp := range file.Imports {
+			p, _ := strconv.Unquote(imp.Path.Value)
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// checkTransitiveCore recorre, desde cada paquete domain/application bajo root, todo el grafo de imports del
+// propio módulo (mod) y reporta si alguna ruta llega a una tecnología concreta: HTTP, SQL o una librería de
+// terceros. Cierra el hueco de checkCoreImports, que solo ve imports directos. [Concern: tecnologías genéricas]
+func checkTransitiveCore(root, mod string) ([]string, error) {
+	var violations []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		if layer := filepath.Base(path); layer != "domain" && layer != "application" {
+			return nil
+		}
+		start := mod + "/" + filepath.ToSlash(mustRel(root, path))
+		visited := map[string]bool{start: true}
+		type step struct{ pkg, chain string }
+		queue := []step{{start, start}}
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			dir := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(cur.pkg, mod+"/")))
+			imports, err := importsOfDir(dir)
+			if err != nil {
+				return err
+			}
+			for _, p := range imports {
+				first, _, _ := strings.Cut(p, "/")
+				switch {
+				case strings.HasPrefix(p, mod+"/"):
+					if !visited[p] {
+						visited[p] = true
+						queue = append(queue, step{p, cur.chain + " -> " + p})
+					}
+				case !strings.Contains(first, ".") && !isForbiddenStdlib(p):
+					// stdlib permitida
+				default:
+					violations = append(violations, cur.chain+" -> "+p)
+				}
+			}
+		}
+		return nil
+	})
+	sort.Strings(violations)
+	return violations, err
+}
+
+func mustRel(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		panic(err)
+	}
+	return rel
+}
+
+// El núcleo (domain/application) no debe alcanzar HTTP, SQL ni librerías externas ni de forma indirecta
+// (p. ej. importando un contrato que a su vez importe net/http).
+func TestCoreHasNoTransitiveTechnologyDependencies(t *testing.T) {
+	violations, err := checkTransitiveCore(".", modulePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("dependencias tecnológicas transitivas en el núcleo:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// Guarda contra un test transitivo que siempre pasa: el checker debe ver net/http detrás de un contrato.
+func TestTransitiveCheckerDetectsIndirectHTTP(t *testing.T) {
+	const mod = "example.com/m"
+	root := t.TempDir()
+	write := func(rel, src string) {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("replica/demo/application/a.go", "package application\nimport _ \""+mod+"/contracts/errs\"\n")
+	write("contracts/errs/errs.go", "package errs\nimport _ \"net/http\"\n")
+	write("replica/ok/domain/d.go", "package domain\nimport _ \"fmt\"\n")
+	violations, err := checkTransitiveCore(root, mod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 1 || !strings.HasSuffix(violations[0], "-> net/http") {
+		t.Fatalf("se esperaba 1 violación indirecta por net/http, hubo: %v", violations)
+	}
+}
+
+// nonTestGoFiles lista los .go de producción bajo dir (relativo a src).
+func nonTestGoFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func importsOfFile(t *testing.T, path string) []string {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, imp := range file.Imports {
+		p, _ := strconv.Unquote(imp.Path.Value)
+		out = append(out, p)
+	}
+	return out
+}
+
+// ADR-02: los módulos del monolito solo se conocen por el domain del otro (o por puertos en src/ports).
+// Excepciones explícitas, tomadas de las flechas de AD §4.4:
+//   - Control de permisos → Arreglos de viaje (PERM --> VIA): permissions/adapters consulta el repositorio de arreglos.
+func TestModulesDoNotImportEachOthersInternals(t *testing.T) {
+	modules := []string{"authentication", "permissions", "travelarrangements", "integrations", "recommendations"}
+	exceptions := map[string]string{
+		"replica/permissions/adapters": modulePath + "/replica/travelarrangements/application",
+	}
+	var violations []string
+	for _, mod := range modules {
+		for _, path := range nonTestGoFiles(t, "replica/"+mod) {
+			pkgDir := filepath.ToSlash(filepath.Dir(path))
+			for _, p := range importsOfFile(t, path) {
+				for _, other := range modules {
+					if other == mod {
+						continue
+					}
+					prefix := modulePath + "/replica/" + other
+					if p != prefix && !strings.HasPrefix(p, prefix+"/") {
+						continue
+					}
+					if p == prefix+"/domain" || exceptions[pkgDir] == p {
+						continue
+					}
+					violations = append(violations, fmt.Sprintf("%s importa %q", filepath.ToSlash(path), p))
+				}
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("módulos acoplados a internals de otro módulo (usar su domain o un puerto en src/ports):\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// Los puertos compartidos solo pueden referirse al domain de los módulos, nunca a su application ni a sus adapters.
+func TestPortsOnlyImportModuleDomains(t *testing.T) {
+	for _, path := range nonTestGoFiles(t, "ports") {
+		for _, p := range importsOfFile(t, path) {
+			if strings.HasPrefix(p, modulePath+"/replica/") && !strings.HasSuffix(p, "/domain") {
+				t.Errorf("%s importa %q: los puertos solo pueden usar domain", filepath.ToSlash(path), p)
+			}
+		}
+	}
+}
+
+// Los mocks y stubs de borde solo los ensambla la raíz de composición (región y main); ningún contenedor de
+// producción (réplica, LB, colas, datos) puede importarlos.
+func TestStubsOnlyImportedByCompositionRoot(t *testing.T) {
+	var violations []string
+	for _, path := range nonTestGoFiles(t, ".") {
+		rel := filepath.ToSlash(path)
+		if strings.HasPrefix(rel, "region/") || strings.HasPrefix(rel, "stubs/") {
+			continue
+		}
+		for _, p := range importsOfFile(t, path) {
+			if p == modulePath+"/stubs" {
+				violations = append(violations, fmt.Sprintf("%s importa %q", rel, p))
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("solo region puede ensamblar stubs:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// Fronteras entre contenedores (AD §3): se comunican por src/ports y src/contracts, nunca importándose.
+// Solo region (raíz de composición) y cmd conocen a todos.
+func TestContainersDoNotImportEachOther(t *testing.T) {
+	containers := []string{"replica", "datanode", "priorityqueue", "loadbalancer", "messagequeue"}
+	var violations []string
+	for _, c := range containers {
+		for _, path := range nonTestGoFiles(t, c) {
+			for _, p := range importsOfFile(t, path) {
+				for _, other := range append([]string{"region"}, containers...) {
+					if other == c {
+						continue
+					}
+					prefix := modulePath + "/" + other
+					if p == prefix || strings.HasPrefix(p, prefix+"/") {
+						violations = append(violations, fmt.Sprintf("%s importa %q", filepath.ToSlash(path), p))
+					}
+				}
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("contenedores acoplados entre sí (usar src/ports o src/contracts):\n%s", strings.Join(violations, "\n"))
 	}
 }

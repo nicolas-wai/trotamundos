@@ -11,12 +11,12 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
-// AESGCMTokenCipher [ADR-15][QA-08] Implementa ports.TokenCipher con AES-256-GCM (biblioteca estándar): los tokens
+// AESGCMTokenCipher [ADR-15][QA-08] Implementa ports.TokenCipherPort con AES-256-GCM (biblioteca estándar): los tokens
 // OAuth del correo nunca se guardan en texto plano. La salida es nonce || texto cifrado y autenticado.
 // [Prototipo] La clave se deriva (SHA-256) de la configuración; en producción vendría de un KMS.
 type AESGCMTokenCipher struct{ aead cipher.AEAD }
 
-var _ ports.TokenCipher = (*AESGCMTokenCipher)(nil)
+var _ ports.TokenCipherPort = (*AESGCMTokenCipher)(nil)
 
 // NewAESGCMTokenCipher crea el cifrador a partir de un secreto de configuración.
 func NewAESGCMTokenCipher(secret string) (*AESGCMTokenCipher, error) {

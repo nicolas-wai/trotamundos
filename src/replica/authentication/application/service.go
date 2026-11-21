@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 )
@@ -123,35 +122,4 @@ func newID() (string, error) {
 // [ADR-25] Distintas de las preferencias visuales en LocalStorage [ADR-19].
 type TravelerProfileService interface {
 	UpdatePreferences(ctx context.Context, travelerID string, params map[string]any) error
-}
-
-// UnimplementedAuthenticationService es el stub de la Fase 1.
-type UnimplementedAuthenticationService struct{}
-
-// Register no implementado.
-func (UnimplementedAuthenticationService) Register(context.Context, string, string) (string, error) {
-	return "", apierror.ErrNotImplemented
-}
-
-// Login no implementado.
-func (UnimplementedAuthenticationService) Login(context.Context, string, string) (ports.TokenPair, error) {
-	return ports.TokenPair{}, apierror.ErrNotImplemented
-}
-
-// Refresh no implementado.
-func (UnimplementedAuthenticationService) Refresh(context.Context, string) (ports.AccessToken, error) {
-	return ports.AccessToken{}, apierror.ErrNotImplemented
-}
-
-// Logout no implementado.
-func (UnimplementedAuthenticationService) Logout(context.Context, string) error {
-	return apierror.ErrNotImplemented
-}
-
-// UnimplementedTravelerProfileService es el stub de la Fase 1.
-type UnimplementedTravelerProfileService struct{}
-
-// UpdatePreferences no implementado.
-func (UnimplementedTravelerProfileService) UpdatePreferences(context.Context, string, map[string]any) error {
-	return apierror.ErrNotImplemented
 }

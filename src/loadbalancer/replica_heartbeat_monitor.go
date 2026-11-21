@@ -7,7 +7,7 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
-// ReplicaHeartbeatMonitor [ADR-22] Monitor de heartbeats de réplicas: marca una réplica caída tras
+// ReplicaHeartbeatMonitor [ADR-22][ADR-08] Monitor de heartbeats de réplicas: marca una réplica caída tras
 // 3 pulsos perdidos (pulso de 10 s; el umbral lo resuelve el HeartbeatPort) y la retira/reincorpora
 // del LoadBalancer.
 type ReplicaHeartbeatMonitor struct {

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	auth "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
@@ -85,7 +85,7 @@ func TestRegisterWritesFeedbackAndMergesPreferencesThroughTheQueue(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(gw.writes, []string{operations.RecommendationFeedbackSave}) {
+	if !reflect.DeepEqual(gw.writes, []string{resources.RecommendationFeedbackSave}) {
 		t.Fatalf("escrituras: %v", gw.writes)
 	}
 	if gw.params[0]["idRecomendacion"] != "alo-1" || gw.params[0]["accion"] != "AJUSTAR" {

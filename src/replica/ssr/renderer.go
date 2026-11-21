@@ -15,17 +15,17 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
 
-// Renderer [ADR-17][ADR-20] Genera el HTML del dashboard con payload reducido usando html/template.
+// SSRRenderer [ADR-17][ADR-20] Genera el HTML del dashboard con payload reducido usando html/template.
 // El HTML es un fragmento que el runtime del cliente inyecta en el shell web; html/template escapa
 // todo dato del viajero.
-type Renderer struct {
+type SSRRenderer struct {
 	tpl *template.Template
 }
 
-// NewRenderer carga las plantillas embebidas de src/client/web/templates. Falla con panic si no compilan
+// NewSSRRenderer carga las plantillas embebidas de src/client/web/templates. Falla con panic si no compilan
 // (error de programación detectado al arrancar, no en tiempo de request).
-func NewRenderer() *Renderer {
-	return &Renderer{tpl: template.Must(template.ParseFS(web.Templates, "templates/*.html"))}
+func NewSSRRenderer() *SSRRenderer {
+	return &SSRRenderer{tpl: template.Must(template.ParseFS(web.Templates, "templates/*.html"))}
 }
 
 type dashboardView struct {
@@ -60,7 +60,7 @@ type detailView struct {
 type fieldView struct{ Label, Value string }
 
 // RenderDashboard devuelve el HTML del dashboard con solo datos críticos.
-func (r *Renderer) RenderDashboard(_ context.Context, dashboard application.Dashboard) ([]byte, error) {
+func (r *SSRRenderer) RenderDashboard(_ context.Context, dashboard application.Dashboard) ([]byte, error) {
 	view := dashboardView{}
 	for _, t := range dashboard.Trips {
 		tv := tripView{ID: t.TripID, Name: t.Name, Destination: t.Destination, Dates: dateRange(t.StartDate, t.EndDate)}
@@ -76,7 +76,7 @@ func (r *Renderer) RenderDashboard(_ context.Context, dashboard application.Dash
 }
 
 // RenderArrangementDetail devuelve el fragmento HTML con el detalle completo de un arreglo (carga bajo demanda).
-func (r *Renderer) RenderArrangementDetail(_ context.Context, a domain.TravelArrangement) ([]byte, error) {
+func (r *SSRRenderer) RenderArrangementDetail(_ context.Context, a domain.TravelArrangement) ([]byte, error) {
 	view := detailView{
 		arrangementView: summaryView(a), Sender: string(a.Sender),
 		Updated: a.UpdatedAt.UTC().Format("02/01/2006 15:04"), UpdatedAt: a.UpdatedAt.UTC().Format(time.RFC3339),
@@ -85,7 +85,7 @@ func (r *Renderer) RenderArrangementDetail(_ context.Context, a domain.TravelArr
 	return r.execute("arrangement_detail", view)
 }
 
-func (r *Renderer) execute(name string, data any) ([]byte, error) {
+func (r *SSRRenderer) execute(name string, data any) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := r.tpl.ExecuteTemplate(&buf, name, data); err != nil {
 		return nil, fmt.Errorf("renderizando %s: %w", name, err)

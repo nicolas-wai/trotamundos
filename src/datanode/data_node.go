@@ -48,7 +48,7 @@ type DataNode struct {
 	replica      *readreplica.ReadReplicaStore
 	catalog      *operations.Catalog
 	syncEmitter  *SyncEmitter
-	heartbeat    *HeartbeatEmitter
+	heartbeat    *DataNodeHeartbeatEmitter
 	syncInterval time.Duration
 
 	mu          sync.RWMutex
@@ -86,7 +86,7 @@ func NewDataNode(cfg Config) (*DataNode, error) {
 		primary: prim, replica: repl, catalog: catalog, syncInterval: cfg.SyncInterval,
 		syncEmitter: NewSyncEmitter(cfg.ID, prim, parts, filepath.Join(cfg.Dir, "sync")),
 	}
-	n.heartbeat = NewHeartbeatEmitter(cfg.ID, cfg.Heartbeat, cfg.HeartbeatInterval, n.Role)
+	n.heartbeat = NewDataNodeHeartbeatEmitter(cfg.ID, cfg.Heartbeat, cfg.HeartbeatInterval, n.Role)
 	return n, nil
 }
 

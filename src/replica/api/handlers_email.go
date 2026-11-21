@@ -7,8 +7,8 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
-	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 )
 
 // Vinculación de correo [ADR-15].
@@ -17,17 +17,17 @@ import (
 func writeEmailLinkError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
-	case errors.Is(err, authapp.ErrValidation):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteNotImplemented(w)
+	case errors.Is(err, ports.ErrInvalidInput):
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, ports.ErrInvalidAuthorizationCode):
-		apierror.WriteError(w, http.StatusBadRequest, apierror.CodigoOAuthInvalido, "El código de autorización es inválido o ya fue usado")
-	case errors.Is(err, authapp.ErrLinkedAccountNotFound):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "La cuenta de correo no existe")
+		httpresponse.WriteError(w, http.StatusBadRequest, apierror.CodigoOAuthInvalido, "El código de autorización es inválido o ya fue usado")
+	case errors.Is(err, ports.ErrLinkedAccountNotFound):
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "La cuenta de correo no existe")
 	case errors.Is(err, ports.ErrDataNodeUnavailable), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
 	default:
-		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 	}
 }
 
@@ -42,7 +42,7 @@ func (c *Controllers) LinkEmail(w http.ResponseWriter, r *http.Request) {
 		writeEmailLinkError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusCreated, httpdto.LinkEmailResponse{
+	httpresponse.WriteJSON(w, http.StatusCreated, httpdto.LinkEmailResponse{
 		IDCuenta: account.AccountID, Proveedor: account.Provider, Estado: string(account.Status),
 	})
 }

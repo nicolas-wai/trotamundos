@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/datanode/operations"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	auth "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
@@ -164,7 +164,7 @@ func (h *HITLFeedback) Register(ctx context.Context, travelerID, recommendationI
 	if err != nil {
 		return err
 	}
-	if _, err := h.data.Write(ctx, travelerID, operations.RecommendationFeedbackSave, map[string]any{
+	if _, err := h.data.Write(ctx, travelerID, resources.RecommendationFeedbackSave, map[string]any{
 		"idFeedback": id, "idRecomendacion": recommendationID, "idViajero": travelerID,
 		"accion": string(feedback.Action), "parametrosAjustados": string(params),
 		"fecha": h.now().UTC().Format(time.RFC3339Nano),

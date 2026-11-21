@@ -11,13 +11,11 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
-	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
-	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	recdomain "github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
-	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
+	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
 // unimplementedEmailLinking responde ErrNotImplemented: la vinculación real se prueba en src/region.
@@ -52,14 +50,14 @@ func bodyFor(path string) string {
 
 func newTestRouter() http.Handler {
 	return NewRouter(NewControllers(Dependencies{
-		Authentication: authapp.UnimplementedAuthenticationService{},
-		Profile:        authapp.UnimplementedTravelerProfileService{},
-		Arrangements:   taapp.UnimplementedTravelArrangementsService{},
-		Permissions:    permapp.UnimplementedPermissionsService{},
+		Authentication: stubs.UnimplementedAuthenticationService{},
+		Profile:        stubs.UnimplementedTravelerProfileService{},
+		Arrangements:   stubs.UnimplementedTravelArrangementsService{},
+		Permissions:    stubs.UnimplementedPermissionsService{},
 		Recommender:    unimplementedRecommender{},
 		EmailLinking:   unimplementedEmailLinking{},
-		Renderer:       ssr.NewRenderer(),
-	}), tokenvalidator.NewValidator(fakeTokens{}))
+		Renderer:       ssr.NewSSRRenderer(),
+	}), tokenvalidator.NewSignedTokenValidator(fakeTokens{}))
 }
 
 // fakeTokens acepta únicamente el token "ok" (la validación real se prueba en tokenvalidator y en la integración).

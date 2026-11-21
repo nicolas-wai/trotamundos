@@ -7,6 +7,7 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	permdomain "github.com/nicolas-wai/trotamundos/src/replica/permissions/domain"
@@ -20,28 +21,28 @@ func writeItineraryError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &denied):
 		// 403 con la opción de solicitar acceso (AD §6.2). El rechazo del dueño bloquea: no se ofrece solicitar.
-		apierror.WriteJSON(w, http.StatusForbidden, httpdto.AccessDeniedResponse{
+		httpresponse.WriteJSON(w, http.StatusForbidden, httpdto.AccessDeniedResponse{
 			Codigo: apierror.AccesoNoAutorizado, Mensaje: "No tienes acceso a este itinerario", PuedeSolicitar: denied.CanRequest,
 		})
 	case errors.Is(err, apierror.ErrNotImplemented):
-		apierror.WriteNotImplemented(w)
+		httpresponse.WriteNotImplemented(w)
 	case errors.Is(err, permapp.ErrValidation):
-		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+		httpresponse.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
 	case errors.Is(err, permapp.ErrForbidden), errors.Is(err, permdomain.ErrAccessBlocked):
-		apierror.WriteError(w, http.StatusForbidden, apierror.AccesoNoAutorizado, err.Error())
+		httpresponse.WriteError(w, http.StatusForbidden, apierror.AccesoNoAutorizado, err.Error())
 	case errors.Is(err, permapp.ErrItineraryNotFound):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El itinerario no existe")
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El itinerario no existe")
 	case errors.Is(err, permapp.ErrArrangementNotFound):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El arreglo de viaje no existe")
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "El arreglo de viaje no existe")
 	case errors.Is(err, permdomain.ErrRequestNotFound), errors.Is(err, permdomain.ErrPermissionNotFound):
-		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, err.Error())
+		httpresponse.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, err.Error())
 	case errors.Is(err, permdomain.ErrRequestNotPending), errors.Is(err, permdomain.ErrAlreadyAuthorized),
 		errors.Is(err, permdomain.ErrOwnerAlreadyHasAccess):
-		apierror.WriteError(w, http.StatusConflict, apierror.Conflicto, err.Error())
+		httpresponse.WriteError(w, http.StatusConflict, apierror.Conflicto, err.Error())
 	case errors.Is(err, ports.ErrDataNodeUnavailable), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
 	default:
-		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+		httpresponse.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
 	}
 }
 
@@ -58,7 +59,7 @@ func (c *Controllers) GetItinerary(w http.ResponseWriter, r *http.Request) {
 			IDArreglo: a.ArrangementID, Tipo: a.Type, Titulo: a.Title, FechaInicio: a.StartAt, Estado: a.Status, Origen: a.Origin,
 		})
 	}
-	apierror.WriteJSON(w, http.StatusOK, out)
+	httpresponse.WriteJSON(w, http.StatusOK, out)
 }
 
 // CreateItinerary atiende POST /itinerarios.
@@ -72,7 +73,7 @@ func (c *Controllers) CreateItinerary(w http.ResponseWriter, r *http.Request) {
 		writeItineraryError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusCreated, httpdto.CreateItineraryResponse{IDItinerario: it.ItineraryID, LinkPublico: it.PublicLink})
+	httpresponse.WriteJSON(w, http.StatusCreated, httpdto.CreateItineraryResponse{IDItinerario: it.ItineraryID, LinkPublico: it.PublicLink})
 }
 
 // DeleteItinerary atiende DELETE /itinerarios/{id}.
@@ -101,7 +102,7 @@ func (c *Controllers) RequestItineraryAccess(w http.ResponseWriter, r *http.Requ
 		writeItineraryError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusCreated, httpdto.CreateAccessRequestResponse{IDSolicitud: req.RequestID, Estado: string(req.Status)})
+	httpresponse.WriteJSON(w, http.StatusCreated, httpdto.CreateAccessRequestResponse{IDSolicitud: req.RequestID, Estado: string(req.Status)})
 }
 
 // ListItineraryRequests atiende GET /itinerarios/{id}/solicitudes (solo el dueño).
@@ -117,7 +118,7 @@ func (c *Controllers) ListItineraryRequests(w http.ResponseWriter, r *http.Reque
 			IDSolicitud: q.RequestID, IDViajero: q.RequesterTravelerID, Estado: string(q.Status),
 		})
 	}
-	apierror.WriteJSON(w, http.StatusOK, out)
+	httpresponse.WriteJSON(w, http.StatusOK, out)
 }
 
 // DecideItineraryRequest atiende POST /itinerarios/{id}/solicitudes/{idSolicitud}/decision (solo el dueño).
@@ -132,7 +133,7 @@ func (c *Controllers) DecideItineraryRequest(w http.ResponseWriter, r *http.Requ
 		writeItineraryError(w, err)
 		return
 	}
-	apierror.WriteJSON(w, http.StatusOK, httpdto.DecisionResponse{Estado: string(status)})
+	httpresponse.WriteJSON(w, http.StatusOK, httpdto.DecisionResponse{Estado: string(status)})
 }
 
 // RevokeItineraryAccess atiende DELETE /itinerarios/{id}/accesos/{idViajero}.
