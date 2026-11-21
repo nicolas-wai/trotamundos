@@ -38,3 +38,4 @@ Cuando `ArchitectureDesign.md` o un ADR especifique tecnologías/protocolos prod
 - **Fuente de verdad:** Usa `@ArchitectureDesign.md` y `@ImplementationPlan.md`. **NO leas** archivos dentro de `docs/` (iteraciones o ADRs individuales) a menos que se te pida explícitamente revisar un ADR puntual.
 - Ejecuta **una sola fase por turno/sesión** según `ImplementationPlan.md`.
 - Al finalizar una fase, escribe y ejecuta `go test ./...`, verifica que todo compile y pase sin errores, marca los checkboxes `[x]` en `ImplementationPlan.md` y detente para revisión humana.
+- Al usar `cat` sobre archivos grandes, redirige la salida a un archivo y muestra solo las líneas relevantes (`head`, `sed -n`, `grep`).

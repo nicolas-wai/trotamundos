@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS shared_itineraries (
     nombre TEXT NOT NULL,
     link_publico TEXT NOT NULL
 );
+-- Arreglos propios referenciados por un itinerario compartido (AD §2.1: ItinerarioCompartido o-- ArregloViaje) [ADR-13].
+CREATE TABLE IF NOT EXISTS itinerary_arrangements (
+    id_itinerario TEXT NOT NULL,
+    id_viajero TEXT NOT NULL,
+    id_arreglo TEXT NOT NULL,
+    PRIMARY KEY (id_itinerario, id_arreglo)
+);
 CREATE TABLE IF NOT EXISTS access_permissions (
     id_itinerario TEXT NOT NULL,
     id_viajero TEXT NOT NULL,

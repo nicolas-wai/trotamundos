@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
@@ -33,6 +34,8 @@ type Dependencies struct {
 	Recommender    ports.RecommenderPort
 	EmailLinking   EmailLinkingService
 	Renderer       *ssr.Renderer
+	// RecommendationTimeout limita la generación de recomendaciones (0 = 3 s, QA-17).
+	RecommendationTimeout time.Duration
 }
 
 // Controllers contiene los handlers HTTP de todas las rutas de AD §6.2.

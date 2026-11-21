@@ -47,3 +47,14 @@ fieldset { border: 1px solid var(--border); border-radius: .4rem; margin: 0 0 .7
 dialog { width: min(32rem, 92vw); border: 1px solid var(--border); border-radius: .6rem; background: var(--surface); color: var(--text); }
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 @media (max-width: 30rem) { li.arrangement .actions { flex-basis: 100%; } }
+
+/* [ADR-23] Panel de recomendaciones: sección propia, independiente de las reservas. */
+.recommendations-panel .panel-header h2 { margin: 0 0 .5rem; font-size: 1.15rem; }
+ul.recommendations { list-style: none; margin: 0; padding: 0; }
+li.recommendation { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; padding: .5rem .25rem; border-top: 1px solid var(--border); }
+li.recommendation .title { font-weight: 600; flex: 1 1 12rem; }
+li.recommendation .meta { color: var(--muted); font-size: .9rem; flex: 1 1 14rem; }
+li.recommendation .actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+li.recommendation .actions button { background: transparent; color: var(--accent); }
+li.recommendation .adjust-form { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+li.recommendation .adjust-form label { margin: 0; }

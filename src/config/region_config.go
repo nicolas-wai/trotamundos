@@ -33,6 +33,7 @@ type RegionConfig struct {
 	ProviderBackoff        time.Duration // espera base progresiva entre reintentos [ADR-07]
 	ProviderCooldown       time.Duration // tiempo con el circuito abierto antes de probar (semiabierto) [ADR-07]
 	ProviderPollTimeout    time.Duration // límite de cada sondeo a un proveedor
+	RecommendationTimeout  time.Duration // límite de generación de recomendaciones, 3 s [QA-17][ADR-23]
 }
 
 // Default devuelve la configuración por defecto del prototipo.
@@ -56,6 +57,7 @@ func Default() RegionConfig {
 		ProviderBackoff:        500 * time.Millisecond,
 		ProviderCooldown:       30 * time.Second,
 		ProviderPollTimeout:    10 * time.Second,
+		RecommendationTimeout:  3 * time.Second,
 	}
 }
 
@@ -123,6 +125,7 @@ func LoadFrom(getenv func(string) string) (RegionConfig, error) {
 	dur("TROTAMUNDOS_PROVIDER_BACKOFF", &c.ProviderBackoff)
 	dur("TROTAMUNDOS_PROVIDER_COOLDOWN", &c.ProviderCooldown)
 	dur("TROTAMUNDOS_PROVIDER_POLL_TIMEOUT", &c.ProviderPollTimeout)
+	dur("TROTAMUNDOS_RECOMMENDATION_TIMEOUT", &c.RecommendationTimeout)
 	if v := getenv("TROTAMUNDOS_POLLING"); v != "" {
 		b, err := strconv.ParseBool(v)
 		setErr("TROTAMUNDOS_POLLING", err)
@@ -150,6 +153,8 @@ func (c RegionConfig) Validate() error {
 		return fmt.Errorf("parámetros de heartbeat inválidos")
 	case c.ProviderMaxRetries < 0 || c.ProviderBackoff < 0 || c.ProviderCooldown <= 0 || c.ProviderPollTimeout <= 0:
 		return fmt.Errorf("parámetros del circuit breaker inválidos")
+	case c.RecommendationTimeout <= 0:
+		return fmt.Errorf("el límite de generación de recomendaciones debe ser positivo (QA17)")
 	case c.TokenEncryptionKey == "":
 		return fmt.Errorf("falta la clave de cifrado de tokens OAuth")
 	case c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0:

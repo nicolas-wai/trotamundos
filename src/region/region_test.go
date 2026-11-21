@@ -175,12 +175,12 @@ func TestFlow55AuthenticationWithShortLivedTokens(t *testing.T) {
 	}
 	access, refresh := body["accessToken"].(string), body["refreshToken"].(string)
 
-	// Requests autenticados atendidos por réplicas distintas sin estado compartido: pasan el token (501 ≠ 401).
-	// Se usa /recomendaciones, que sigue sin implementar hasta la Fase 5.
+	// Requests autenticados atendidos por réplicas distintas sin estado compartido: pasan el token y responden 200.
+	// Se usa /recomendaciones (Fase 5): una ruta de solo lectura que atraviesa toda la ruta de datos.
 	replicas := map[string]bool{}
 	for i := 0; i < 4; i++ {
 		resp, body = e.do(t, "GET", "/recomendaciones", access, nil)
-		if resp.StatusCode != 501 || body["codigo"] != "NO_IMPLEMENTADO" {
+		if resp.StatusCode != 200 || body["recomendaciones"] == nil {
 			t.Fatalf("con token válido: %d %v", resp.StatusCode, body)
 		}
 		replicas[resp.Header.Get("X-Replica-Id")] = true
@@ -205,7 +205,7 @@ func TestFlow55AuthenticationWithShortLivedTokens(t *testing.T) {
 	if resp.StatusCode != 200 || body["tokenType"] != "Bearer" || body["expiresIn"] != float64(900) {
 		t.Fatalf("refresh: %d %v", resp.StatusCode, body)
 	}
-	if resp, _ = e.do(t, "GET", "/recomendaciones", body["accessToken"].(string), nil); resp.StatusCode != 501 {
+	if resp, _ = e.do(t, "GET", "/recomendaciones", body["accessToken"].(string), nil); resp.StatusCode != 200 {
 		t.Fatalf("el access renovado debía ser aceptado: %d", resp.StatusCode)
 	}
 

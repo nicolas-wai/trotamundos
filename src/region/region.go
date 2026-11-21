@@ -75,6 +75,11 @@ type Region struct {
 	EventBus     *messagequeue.InMemoryEventBus     // bus interno, E2 [ADR-07]
 	ExternalAPIs ExternalAPIs                       // sistemas externos simulados [Prototipo]
 
+	// Itinerarios compartidos y recomendaciones (Fase 5). El notificador recibe E7 por el bus (una sola vez por
+	// región, no por réplica) y el catálogo admite fallas/demoras inyectables para probar ADR-23.
+	OwnerNotifier   *stubs.InMemoryOwnerNotifier
+	ProviderCatalog *stubs.StubProviderCatalog
+
 	mu             sync.Mutex
 	swaps          []events.ResponsibilitySwap
 	replicaCancels []context.CancelFunc
@@ -125,11 +130,19 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 		OAuth: stubs.NewMockOAuth2AuthAdapter(), Email: stubs.NewStubEmailProviderAPI(),
 		Agency: stubs.NewStubAgencyAPI(), TravelSystem: stubs.NewStubTravelSystemAPI(),
 	}
+	r.OwnerNotifier = stubs.NewInMemoryOwnerNotifier()
+	r.ProviderCatalog = stubs.NewStubProviderCatalog()
+	// E7 SolicitudAccesoCreada: Control de permisos publica en el bus y el notificador del dueño lo registra. [ADR-13]
+	r.EventBus.Subscribe(events.TopicAccessRequestCreated, func(ctx context.Context, payload any) {
+		if e7, ok := payload.(events.AccessRequestCreated); ok {
+			_ = r.OwnerNotifier.NotifyAccessRequest(ctx, e7)
+		}
+	})
 	for i := 0; i < cfg.ReplicaCount; i++ {
 		id := ReplicaID(cfg, i)
 		r.Replicas = append(r.Replicas, replica.New(id, cfg, replica.Dependencies{
 			Queue: submitter, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
-			MessageQueue: r.MessageQueue, EventBus: r.EventBus, OAuth: r.ExternalAPIs.OAuth,
+			MessageQueue: r.MessageQueue, EventBus: r.EventBus, OAuth: r.ExternalAPIs.OAuth, ProviderCatalog: r.ProviderCatalog,
 			Providers:       integrations.Clients{Mail: r.ExternalAPIs.Email, Agency: r.ExternalAPIs.Agency, TravelSystem: r.ExternalAPIs.TravelSystem},
 			RunIntegrations: i == 0,
 		}))

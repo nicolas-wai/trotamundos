@@ -17,6 +17,7 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/circuitbreaker"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/oauthmanager"
+	permadapters "github.com/nicolas-wai/trotamundos/src/replica/permissions/adapters"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
@@ -44,7 +45,9 @@ type Dependencies struct {
 	MessageQueue ports.MessageQueuePort // cola P2P [ADR-04]
 	EventBus     ports.EventBusPort     // bus de eventos interno (E2) [ADR-07]
 	OAuth        ports.OAuthEmailPort   // proveedor OAuth del correo (nil = MockOAuth2AuthAdapter propio)
-	Providers    integrations.Clients   // APIs externas de los adapters (stubs)
+	// ProviderCatalog es el catálogo de proveedores de las recomendaciones (nil = StubProviderCatalog). [ADR-25]
+	ProviderCatalog ports.ProviderCatalogPort
+	Providers       integrations.Clients // APIs externas de los adapters (stubs)
 	// RunIntegrations marca a la réplica que ejecuta el consumidor de la cola P2P y el planificador de sondeo.
 	// La cola P2P admite un único consumidor [ADR-04], por lo que la región designa una sola réplica.
 	RunIntegrations bool
@@ -65,8 +68,8 @@ type Replica struct {
 	Integrations   *integrations.Module           // nil si la réplica no ejecuta Integraciones
 }
 
-// New arma una réplica. Autenticación (Fase 2), Arreglos de viaje (Fase 3) e Integraciones externas (Fase 4) son
-// reales; Permisos y Recomendaciones siguen en modo esqueleto.
+// New arma una réplica con todos sus módulos: Autenticación (Fase 2), Arreglos de viaje (Fase 3), Integraciones
+// externas (Fase 4), Permisos y Recomendaciones (Fase 5).
 func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 	queueClient := priorityqueueclient.NewClient(deps.Queue)
 	if deps.Clock != nil {
@@ -91,7 +94,26 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		oauthProvider = stubs.NewMockOAuth2AuthAdapter()
 	}
 	oauth := oauthmanager.NewOAuthManager(oauthProvider, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher)
-	recommender := recommendations.NewRecommender(queueClient)
+
+	// Preferencias del perfil [ADR-25]: las usan el perfil (PUT /perfil/preferencias), el recolector y HITL.
+	preferences := authadapters.NewQueuePreferencesRepository(queueClient)
+	catalog := deps.ProviderCatalog
+	if catalog == nil {
+		catalog = stubs.NewStubProviderCatalog()
+	}
+	// Recomendaciones [ADR-23][ADR-24][ADR-25]: recolector concurrente → motor de filtrado → HITL.
+	recommender := recommendations.NewRecommender(queueClient, preferences, catalog)
+
+	// Control de permisos [ADR-13][QA-09]: itinerarios en el shard del dueño, resuelto por el directorio ◇ [ADR-11].
+	// Consulta Arreglos de viaje por su repositorio (AD §4.4: PERM → VIA) y publica E7 en el bus de eventos.
+	permissions := permapp.NewService(
+		permadapters.NewQueueSharedItineraryRepository(queueClient, permadapters.NewQueueItineraryDirectory(queueClient)),
+		permadapters.NewArrangementRepositoryCatalog(taadapters.NewQueueArrangementRepository(queueClient, typeRegistry)),
+		deps.Clock,
+	)
+	if deps.EventBus != nil {
+		permissions.WithEventBus(deps.EventBus)
+	}
 
 	// Autenticación [ADR-14][ADR-16]: repos sobre la cola, hasher bcrypt y tokens JWT.
 	travelers := authadapters.NewQueueTravelerRepository(queueClient)
@@ -104,12 +126,14 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 
 	controllers := api.NewControllers(api.Dependencies{
 		Authentication: authService,
-		Profile:        authapp.UnimplementedTravelerProfileService{},
+		Profile:        authapp.NewProfileService(preferences),
 		Arrangements:   arrangements,
-		Permissions:    permapp.UnimplementedPermissionsService{},
+		Permissions:    permissions,
 		Recommender:    recommender,
 		EmailLinking:   oauth,
 		Renderer:       renderer,
+
+		RecommendationTimeout: cfg.RecommendationTimeout,
 	})
 	router := api.NewRouter(controllers, validator)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

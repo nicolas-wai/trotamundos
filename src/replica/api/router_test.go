@@ -14,8 +14,7 @@ import (
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
-	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
-	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
+	recdomain "github.com/nicolas-wai/trotamundos/src/replica/recommendations/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
 	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
@@ -32,13 +31,32 @@ func (unimplementedEmailLinking) Unlink(context.Context, string, string) error {
 	return apierror.ErrNotImplemented
 }
 
+// unimplementedRecommender responde ErrNotImplemented: el recomendador real se prueba en src/region.
+type unimplementedRecommender struct{}
+
+func (unimplementedRecommender) Generate(context.Context, string) ([]recdomain.Recommendation, error) {
+	return nil, apierror.ErrNotImplemented
+}
+
+func (unimplementedRecommender) RegisterFeedback(context.Context, string, string, recdomain.FeedbackAction, map[string]any) error {
+	return apierror.ErrNotImplemented
+}
+
+// bodyFor devuelve un cuerpo válido para la ruta: los handlers validan el JSON antes de llamar al módulo.
+func bodyFor(path string) string {
+	if strings.HasSuffix(path, "/feedback") {
+		return `{"accion":"ACEPTAR"}`
+	}
+	return "{}"
+}
+
 func newTestRouter() http.Handler {
 	return NewRouter(NewControllers(Dependencies{
 		Authentication: authapp.UnimplementedAuthenticationService{},
 		Profile:        authapp.UnimplementedTravelerProfileService{},
 		Arrangements:   taapp.UnimplementedTravelArrangementsService{},
 		Permissions:    permapp.UnimplementedPermissionsService{},
-		Recommender:    recommendations.NewRecommender(priorityqueueclient.NewClient(nil)),
+		Recommender:    unimplementedRecommender{},
 		EmailLinking:   unimplementedEmailLinking{},
 		Renderer:       ssr.NewRenderer(),
 	}), tokenvalidator.NewValidator(fakeTokens{}))
@@ -85,7 +103,8 @@ var contractRoutes = []struct{ method, path string }{
 	{"DELETE", "/itinerarios/i1/accesos/v1"},
 }
 
-// Las rutas protegidas todavía sin módulo responden 501 NO_IMPLEMENTADO una vez superado el token (Fases 3-5).
+// Con los módulos sustituidos por stubs de la Fase 1, toda ruta protegida responde 501 NO_IMPLEMENTADO una vez
+// superado el token: verifica que cada ruta de AD §6.2 esté registrada y traduzca el error al formato de §6.1.
 func TestEveryProtectedRouteRespondsNotImplementedWithToken(t *testing.T) {
 	if len(contractRoutes) != 23 {
 		t.Fatalf("AD §6.2 define 23 rutas, la tabla tiene %d", len(contractRoutes))
@@ -96,7 +115,7 @@ func TestEveryProtectedRouteRespondsNotImplementedWithToken(t *testing.T) {
 			continue
 		}
 		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
-			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{}"))
+			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(bodyFor(rt.path)))
 			req.Header.Set("Authorization", "Bearer ok")
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)

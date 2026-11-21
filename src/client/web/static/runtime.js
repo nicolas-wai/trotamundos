@@ -133,7 +133,8 @@
         state = new global.OptimisticState(els.app);
         localizeTimes(els.app);
         global.VisualPreferences.applyOrder(els.app); // preferencias aplicadas antes de mostrar [ADR-19]
-        if (global.RecommendationsPanel) { global.RecommendationsPanel.init(els.app); }
+        // [ADR-23] Request independiente: no se espera ni bloquea las reservas ya visibles.
+        if (global.RecommendationsPanel) { global.RecommendationsPanel.init(els.app, { request: request, notify: showBanner }); }
       });
     }).catch(function () {
       els.app.innerHTML = '<p class="form-error">Sin conexión con el servidor.</p>';

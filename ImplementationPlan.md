@@ -284,20 +284,20 @@ src/
 
 **Tareas — Itinerarios compartidos (US07 parcial):**
 
-- [ ] `permissions/application`: crear (con `linkPublico` por defecto), eliminar, agregar/quitar arreglos propios, `puedeVer`, `solicitarAcceso`, `decidir`, `revocar` [ADR13].
-- [ ] Registro en `itinerary_directory` para resolver el shard del dueño a partir de `idItinerario` ◇ [ADR11].
-- [ ] Endpoints de la tabla de §6.2: `GET /itinerarios/{idItinerario}` (`200` o `403 { codigo: "ACCESO_NO_AUTORIZADO", puedeSolicitar: true }`), `POST /itinerarios`, `DELETE /itinerarios/{id}`, `POST|DELETE /itinerarios/{id}/arreglos[/{idArreglo}]`, `POST|GET /itinerarios/{id}/solicitudes`, `POST /itinerarios/{id}/solicitudes/{idSolicitud}/decision`, `DELETE /itinerarios/{id}/accesos/{idViajero}`.
-- [ ] Publicar E7 `SolicitudAccesoCreada` en el bus; `InMemoryOwnerNotifier` la registra (canal real no definido en AD).
-- [ ] Solo el dueño puede gestionar el itinerario, listar solicitudes y decidir (`403` en otro caso). Rechazo bloquea el acceso.
+- [x] `permissions/application`: crear (con `linkPublico` por defecto), eliminar, agregar/quitar arreglos propios, `puedeVer`, `solicitarAcceso`, `decidir`, `revocar` [ADR13].
+- [x] Registro en `itinerary_directory` para resolver el shard del dueño a partir de `idItinerario` ◇ [ADR11].
+- [x] Endpoints de la tabla de §6.2: `GET /itinerarios/{idItinerario}` (`200` o `403 { codigo: "ACCESO_NO_AUTORIZADO", puedeSolicitar: true }`), `POST /itinerarios`, `DELETE /itinerarios/{id}`, `POST|DELETE /itinerarios/{id}/arreglos[/{idArreglo}]`, `POST|GET /itinerarios/{id}/solicitudes`, `POST /itinerarios/{id}/solicitudes/{idSolicitud}/decision`, `DELETE /itinerarios/{id}/accesos/{idViajero}`.
+- [x] Publicar E7 `SolicitudAccesoCreada` en el bus; `InMemoryOwnerNotifier` la registra (canal real no definido en AD).
+- [x] Solo el dueño puede gestionar el itinerario, listar solicitudes y decidir (`403` en otro caso). Rechazo bloquea el acceso.
 
 **Tareas — Recomendaciones (US08):**
 
-- [ ] `StubProviderCatalog`: ítems de alojamiento, transporte y ruta con metadatos determinísticos (precio, destino, categoría, estrellas…).
-- [ ] `ConcurrentCollector` (`HistoryPort`): lecturas en paralelo (gorutinas + `errgroup` propio o `sync.WaitGroup`) de historial por tabla (arreglos, viajes, feedback) y del perfil, unificadas después; cada lectura pasa por la cola de prioridades [ADR24].
-- [ ] `ContentBasedFilteringEngine`: filtra/puntúa el catálogo por similitud de metadatos con historial y `TravelerPreferences` [ADR25].
-- [ ] `HITLFeedback` (Analyzer + Updater): `ACEPTAR` / `RECHAZAR` / `AJUSTAR` actualizan `TravelerPreferences` vía escritura en cola [ADR25, QA18].
-- [ ] `GET /recomendaciones` con `context.WithTimeout` de 3 s (QA17); `POST /recomendaciones/{idRecomendacion}/feedback` `200 { registrado: true }`; `PUT /perfil/preferencias` `200`.
-- [ ] `static/recommendations_panel.js`: request independiente tras el primer render, estado de carga y estado de error sin bloquear las reservas [ADR23].
+- [x] `StubProviderCatalog`: ítems de alojamiento, transporte y ruta con metadatos determinísticos (precio, destino, categoría, estrellas…).
+- [x] `ConcurrentCollector` (`HistoryPort`): lecturas en paralelo (gorutinas + `errgroup` propio o `sync.WaitGroup`) de historial por tabla (arreglos, viajes, feedback) y del perfil, unificadas después; cada lectura pasa por la cola de prioridades [ADR24].
+- [x] `ContentBasedFilteringEngine`: filtra/puntúa el catálogo por similitud de metadatos con historial y `TravelerPreferences` [ADR25].
+- [x] `HITLFeedback` (Analyzer + Updater): `ACEPTAR` / `RECHAZAR` / `AJUSTAR` actualizan `TravelerPreferences` vía escritura en cola [ADR25, QA18].
+- [x] `GET /recomendaciones` con `context.WithTimeout` de 3 s (QA17); `POST /recomendaciones/{idRecomendacion}/feedback` `200 { registrado: true }`; `PUT /perfil/preferencias` `200`.
+- [x] `static/recommendations_panel.js`: request independiente tras el primer render, estado de carga y estado de error sin bloquear las reservas [ADR23].
 
 **Criterio de verificación** (`go test ./...`):
 
@@ -308,3 +308,14 @@ src/
 - Integración flujos 5.1/5.8: `GET /recomendaciones` < 3 s → `POST feedback AJUSTAR { presupuestoMax: 120 }` → la **siguiente** `GET /recomendaciones` excluye ítems sobre ese presupuesto (QA18).
 - Integración ADR23: con el recomendador forzado a fallar/demorar, `GET /recomendaciones` responde error/timeout mientras `GET /dashboard` sigue `200`.
 - `go test ./...` completo en verde, incluido el test de arquitectura, como cierre del prototipo.
+
+> Estado (Fase 5): `go build`, `go vet` y `go test ./...` (también con `-race`) en verde; smoke del binario con `curl` (registro → `GET /recomendaciones` 12 ítems → feedback `AJUSTAR {presupuestoMax:120}` → siguiente GET solo con ítems ≤ 120 → `POST /itinerarios`). El JS del panel (`recommendations_panel.js`) no tiene tests automáticos y no se ejecutó en un navegador (sin Node ni driver). Decisiones de implementación a revisar:
+>
+> - **Rechazo bloquea ◇:** un viajero con solicitud `RECHAZADA` no puede volver a solicitar (`403`) y su `403` de `GET /itinerarios/{id}` trae `puedeSolicitar: false`. Un acceso revocado sí puede pedirse de nuevo (requiere nueva decisión del dueño). Solicitar con una pendiente es idempotente (misma solicitud, una sola notificación E7).
+> - **`403` vs `404` ◇:** itinerario inexistente → `404`; existente pero gestionado por un no-dueño → `403`. `POST /itinerarios` con un arreglo ajeno/inexistente → `422`; `POST /itinerarios/{id}/arreglos` con uno ajeno/inexistente → `404`.
+> - **Persistencia ◇:** tabla nueva `itinerary_arrangements` en el shard del dueño; el directorio `itinerary_directory` se registra al final de la creación (hasta entonces nadie resuelve el itinerario) y se retira primero al eliminar. El invitado ve solo datos críticos de las reservas (sin `detalle`).
+> - **E7:** `Permisos` publica en el bus; la suscripción que llama a `InMemoryOwnerNotifier` se hace una vez en `region.New` (no por réplica, para no duplicar notificaciones).
+> - **Recomendaciones ◇:** `idRecomendacion` = id del ítem del catálogo (determinístico); nuevo puerto `ProviderCatalogPort` ← `StubProviderCatalog` (con falla/demora inyectables). Las recomendaciones generadas **no se persisten** (la tabla `recommendations` queda sin uso); sí se persiste el feedback (`recommendation_feedback`) y las preferencias. `RECHAZAR`/`ACEPTAR` actúan por el historial de feedback (el motor excluye lo rechazado y prioriza lo aceptado); `ACEPTAR` además guarda `destinoPreferido` y `proveedorPreferido`; `AJUSTAR` mezcla `parametrosAjustados` en las preferencias. Las preferencias se actualizan con lectura-modificación-escritura (sin control de concurrencia: dos feedbacks simultáneos del mismo viajero podrían pisarse).
+> - **Timeout/fallo del panel:** `GET /recomendaciones` responde `503 MODULO_NO_DISPONIBLE` ante falla o demora; límite configurable con `TROTAMUNDOS_RECOMMENDATION_TIMEOUT` (3 s por defecto).
+> - **Cambio de tests heredados:** las pruebas de Fase 2 usaban `GET /recomendaciones` como ruta aún sin implementar (esperaban `501`); ahora esperan `200`. El test del router usa un `Recommender` stub y un cuerpo válido para el feedback.
+

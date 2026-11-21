@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -179,5 +180,69 @@ func (r *QueueLinkedEmailAccountRepository) Delete(ctx context.Context, traveler
 		return application.ErrLinkedAccountNotFound
 	}
 	_, err = r.data.Write(ctx, "", operations.DirectoryLinkedAccountRemove, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	return err
+}
+
+// QueuePreferencesRepository [ADR-09][ADR-11][ADR-25] Implementa PreferencesRepository sobre la cola de prioridades.
+// Las preferencias de recomendación viven en el shard del viajero, en columnas JSON.
+type QueuePreferencesRepository struct{ data ports.DataGateway }
+
+var _ application.PreferencesRepository = (*QueuePreferencesRepository)(nil)
+
+// NewQueuePreferencesRepository crea el repositorio.
+func NewQueuePreferencesRepository(data ports.DataGateway) *QueuePreferencesRepository {
+	return &QueuePreferencesRepository{data: data}
+}
+
+// Get lee las preferencias (LECTURA, prioridad alta). Un viajero sin fila tiene preferencias vacías.
+func (r *QueuePreferencesRepository) Get(ctx context.Context, travelerID string) (domain.TravelerPreferences, error) {
+	res, err := r.data.Read(ctx, travelerID, operations.PreferencesGet, map[string]any{"idViajero": travelerID})
+	if err != nil {
+		return domain.TravelerPreferences{}, err
+	}
+	prefs := domain.TravelerPreferences{
+		TravelerID: travelerID, RecommendationParams: map[string]any{}, AccommodationPreferences: map[string]any{},
+		TransportPreferences: map[string]any{}, RoutePreferences: map[string]any{},
+	}
+	if len(res.Rows) == 0 {
+		return prefs, nil
+	}
+	row := res.Rows[0]
+	for col, dst := range map[string]*map[string]any{
+		"recommendation_params": &prefs.RecommendationParams, "accommodation_preferences": &prefs.AccommodationPreferences,
+		"transport_preferences": &prefs.TransportPreferences, "route_preferences": &prefs.RoutePreferences,
+	} {
+		decoded := map[string]any{}
+		if raw := str(row[col]); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+				return domain.TravelerPreferences{}, fmt.Errorf("preferencias corruptas (%s): %w", col, err)
+			}
+		}
+		*dst = decoded
+	}
+	return prefs, nil
+}
+
+// Save reemplaza las preferencias del viajero (ESCRITURA, prioridad baja).
+func (r *QueuePreferencesRepository) Save(ctx context.Context, p domain.TravelerPreferences) error {
+	encode := func(m map[string]any) (string, error) {
+		if m == nil {
+			m = map[string]any{}
+		}
+		raw, err := json.Marshal(m)
+		return string(raw), err
+	}
+	params := map[string]any{"idViajero": p.TravelerID}
+	for name, m := range map[string]map[string]any{
+		"recommendationParams": p.RecommendationParams, "accommodationPreferences": p.AccommodationPreferences,
+		"transportPreferences": p.TransportPreferences, "routePreferences": p.RoutePreferences,
+	} {
+		raw, err := encode(m)
+		if err != nil {
+			return err
+		}
+		params[name] = raw
+	}
+	_, err := r.data.Write(ctx, p.TravelerID, operations.PreferencesSave, params)
 	return err
 }
