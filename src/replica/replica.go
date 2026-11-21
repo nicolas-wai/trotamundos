@@ -3,15 +3,19 @@
 package replica
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
+	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/api"
 	authadapters "github.com/nicolas-wai/trotamundos/src/replica/authentication/adapters"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/heartbeat"
+	"github.com/nicolas-wai/trotamundos/src/replica/integrations"
+	"github.com/nicolas-wai/trotamundos/src/replica/integrations/circuitbreaker"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/oauthmanager"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
@@ -34,6 +38,16 @@ type Dependencies struct {
 	Heartbeat    ports.HeartbeatPort           // canal de heartbeats hacia el balanceador
 	Clock        func() time.Time              // reloj (nil = time.Now)
 	PasswordCost int                           // costo de bcrypt (0 = por defecto)
+
+	// Infraestructura de la región compartida entre réplicas (Fase 4). Si MessageQueue es nil la réplica no
+	// ejecuta Integraciones externas (solo vincula correos con el OAuth por defecto).
+	MessageQueue ports.MessageQueuePort // cola P2P [ADR-04]
+	EventBus     ports.EventBusPort     // bus de eventos interno (E2) [ADR-07]
+	OAuth        ports.OAuthEmailPort   // proveedor OAuth del correo (nil = MockOAuth2AuthAdapter propio)
+	Providers    integrations.Clients   // APIs externas de los adapters (stubs)
+	// RunIntegrations marca a la réplica que ejecuta el consumidor de la cola P2P y el planificador de sondeo.
+	// La cola P2P admite un único consumidor [ADR-04], por lo que la región designa una sola réplica.
+	RunIntegrations bool
 }
 
 // Replica ensambla los módulos de una réplica del monolito modular.
@@ -47,11 +61,12 @@ type Replica struct {
 	Recommender    *recommendations.Recommender
 	OAuthManager   *oauthmanager.OAuthManager
 	Heartbeat      *heartbeat.Emitter
-	Consumer       *updateconsumer.UpdateConsumer
+	Consumer       *updateconsumer.UpdateConsumer // nil si la réplica no ejecuta Integraciones
+	Integrations   *integrations.Module           // nil si la réplica no ejecuta Integraciones
 }
 
-// New arma una réplica. Autenticación (Fase 2) y Arreglos de viaje (Fase 3) son reales; los demás módulos
-// siguen en modo esqueleto.
+// New arma una réplica. Autenticación (Fase 2), Arreglos de viaje (Fase 3) e Integraciones externas (Fase 4) son
+// reales; Permisos y Recomendaciones siguen en modo esqueleto.
 func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 	queueClient := priorityqueueclient.NewClient(deps.Queue)
 	if deps.Clock != nil {
@@ -64,8 +79,18 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		taadapters.NewQueueTripRepository(queueClient),
 		taadapters.NewQueueArrangementRepository(queueClient, typeRegistry),
 		typeRegistry, deps.Clock,
-	)
-	oauth := oauthmanager.NewOAuthManager(stubs.NewMockOAuth2AuthAdapter())
+	).WithProviderNotices(taadapters.NewQueueProviderNoticeRepository(queueClient)) // avisos E2 [ADR-07]
+
+	// Gestor OAuth del correo [ADR-15]: tokens cifrados con AES-GCM detrás del puerto TokenCipher [QA-08].
+	tokenCipher, err := authadapters.NewAESGCMTokenCipher(cfg.TokenEncryptionKey)
+	if err != nil {
+		panic(err) // la configuración ya fue validada (RegionConfig.Validate)
+	}
+	var oauthProvider ports.OAuthEmailPort = deps.OAuth
+	if oauthProvider == nil {
+		oauthProvider = stubs.NewMockOAuth2AuthAdapter()
+	}
+	oauth := oauthmanager.NewOAuthManager(oauthProvider, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher)
 	recommender := recommendations.NewRecommender(queueClient)
 
 	// Autenticación [ADR-14][ADR-16]: repos sobre la cola, hasher bcrypt y tokens JWT.
@@ -92,6 +117,27 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		router.ServeHTTP(w, r)
 	})
 
+	var (
+		consumer *updateconsumer.UpdateConsumer
+		module   *integrations.Module
+	)
+	if deps.RunIntegrations && deps.MessageQueue != nil {
+		// Integraciones externas [ADR-04..07]: sondeo → circuit breaker → adapters → broker → cola P2P →
+		// consumidor → Arreglos de viaje. Los avisos E2 del circuit breaker llegan por el bus de eventos.
+		module = integrations.NewModule(integrations.Config{
+			PollInterval: cfg.PollInterval, PollTimeout: cfg.ProviderPollTimeout,
+			Breaker: circuitbreaker.Config{MaxRetries: cfg.ProviderMaxRetries, Backoff: cfg.ProviderBackoff, Cooldown: cfg.ProviderCooldown},
+		}, deps.MessageQueue, deps.EventBus, queueClient, oauth, deps.Providers)
+		consumer = updateconsumer.NewUpdateConsumer(deps.MessageQueue, arrangements)
+		if deps.EventBus != nil {
+			deps.EventBus.Subscribe(events.TopicProviderDegraded, func(ctx context.Context, payload any) {
+				if d, ok := payload.(events.ProviderDegraded); ok {
+					_ = arrangements.ReportProviderDegraded(ctx, d)
+				}
+			})
+		}
+	}
+
 	return &Replica{
 		ID:             id,
 		Config:         cfg,
@@ -102,7 +148,8 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) *Replica {
 		Recommender:    recommender,
 		OAuthManager:   oauth,
 		Heartbeat:      heartbeat.NewEmitter(id, deps.Heartbeat, cfg.HeartbeatInterval),
-		Consumer:       updateconsumer.NewUpdateConsumer(nil, arrangements),
+		Consumer:       consumer,
+		Integrations:   module,
 	}
 }
 

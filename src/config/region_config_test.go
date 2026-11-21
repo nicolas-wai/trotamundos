@@ -57,3 +57,37 @@ func TestLoadFromRejectsMalformedNumber(t *testing.T) {
 		t.Fatal("se esperaba error con número inválido")
 	}
 }
+
+func TestLoadFromProviderSettings(t *testing.T) {
+	env := map[string]string{
+		"TROTAMUNDOS_POLLING": "true", "TROTAMUNDOS_PROVIDER_RETRIES": "5", "TROTAMUNDOS_PROVIDER_BACKOFF": "2s",
+		"TROTAMUNDOS_PROVIDER_COOLDOWN": "45s", "TROTAMUNDOS_TOKEN_KEY": "otra-clave",
+	}
+	c, err := LoadFrom(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.PollingEnabled || c.ProviderMaxRetries != 5 || c.ProviderBackoff != 2*time.Second || c.ProviderCooldown != 45*time.Second || c.TokenEncryptionKey != "otra-clave" {
+		t.Fatalf("%+v", c)
+	}
+	d := Default()
+	if d.PollingEnabled || d.ProviderMaxRetries != 3 || d.TokenEncryptionKey == "" {
+		t.Fatalf("defaults: %+v", d)
+	}
+	if _, err := LoadFrom(func(k string) string {
+		if k == "TROTAMUNDOS_POLLING" {
+			return "quizas"
+		}
+		return ""
+	}); err == nil {
+		t.Fatal("booleano inválido")
+	}
+	if _, err := LoadFrom(func(k string) string {
+		if k == "TROTAMUNDOS_PROVIDER_COOLDOWN" {
+			return "0s"
+		}
+		return ""
+	}); err == nil {
+		t.Fatal("cooldown cero")
+	}
+}

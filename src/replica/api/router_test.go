@@ -7,27 +7,39 @@ import (
 	"strings"
 	"testing"
 
+	"context"
+
+	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
-	"github.com/nicolas-wai/trotamundos/src/replica/integrations/oauthmanager"
+	authdomain "github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
 	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
 	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
-	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
+// unimplementedEmailLinking responde ErrNotImplemented: la vinculación real se prueba en src/region.
+type unimplementedEmailLinking struct{}
+
+func (unimplementedEmailLinking) Link(context.Context, string, string, string, string) (authdomain.LinkedEmailAccount, error) {
+	return authdomain.LinkedEmailAccount{}, apierror.ErrNotImplemented
+}
+
+func (unimplementedEmailLinking) Unlink(context.Context, string, string) error {
+	return apierror.ErrNotImplemented
+}
+
 func newTestRouter() http.Handler {
-	oauth := oauthmanager.NewOAuthManager(stubs.NewMockOAuth2AuthAdapter())
 	return NewRouter(NewControllers(Dependencies{
 		Authentication: authapp.UnimplementedAuthenticationService{},
 		Profile:        authapp.UnimplementedTravelerProfileService{},
 		Arrangements:   taapp.UnimplementedTravelArrangementsService{},
 		Permissions:    permapp.UnimplementedPermissionsService{},
 		Recommender:    recommendations.NewRecommender(priorityqueueclient.NewClient(nil)),
-		EmailLinking:   oauth,
+		EmailLinking:   unimplementedEmailLinking{},
 		Renderer:       ssr.NewRenderer(),
 	}), tokenvalidator.NewValidator(fakeTokens{}))
 }

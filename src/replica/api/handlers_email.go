@@ -1,16 +1,57 @@
 package api
 
-import "net/http"
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
+	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
+	"github.com/nicolas-wai/trotamundos/src/ports"
+	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
+)
 
 // Vinculación de correo [ADR-15].
 
-// LinkEmail atiende POST /correos.
-func (c *Controllers) LinkEmail(w http.ResponseWriter, r *http.Request) {
-	_, err := c.deps.EmailLinking.Link(r.Context(), travelerIDFrom(r.Context()), "", "", "")
-	respondSkeleton(w, err)
+// writeEmailLinkError traduce los errores de la vinculación OAuth al contrato de AD §6.1.
+func writeEmailLinkError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, apierror.ErrNotImplemented):
+		apierror.WriteNotImplemented(w)
+	case errors.Is(err, authapp.ErrValidation):
+		apierror.WriteError(w, http.StatusUnprocessableEntity, apierror.ValidacionFallida, err.Error())
+	case errors.Is(err, ports.ErrInvalidAuthorizationCode):
+		apierror.WriteError(w, http.StatusBadRequest, apierror.CodigoOAuthInvalido, "El código de autorización es inválido o ya fue usado")
+	case errors.Is(err, authapp.ErrLinkedAccountNotFound):
+		apierror.WriteError(w, http.StatusNotFound, apierror.NoEncontrado, "La cuenta de correo no existe")
+	case errors.Is(err, ports.ErrDataNodeUnavailable), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		apierror.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Módulo de datos no disponible")
+	default:
+		apierror.WriteError(w, http.StatusInternalServerError, apierror.ErrorInterno, "Error interno")
+	}
 }
 
-// UnlinkEmail atiende DELETE /correos/{idCuenta}.
+// LinkEmail atiende POST /correos: canjea el código OAuth y guarda los tokens cifrados (201).
+func (c *Controllers) LinkEmail(w http.ResponseWriter, r *http.Request) {
+	var req httpdto.LinkEmailRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	account, err := c.deps.EmailLinking.Link(r.Context(), travelerIDFrom(r.Context()), req.Proveedor, req.AuthorizationCode, req.RedirectURI)
+	if err != nil {
+		writeEmailLinkError(w, err)
+		return
+	}
+	apierror.WriteJSON(w, http.StatusCreated, httpdto.LinkEmailResponse{
+		IDCuenta: account.AccountID, Proveedor: account.Provider, Estado: string(account.Status),
+	})
+}
+
+// UnlinkEmail atiende DELETE /correos/{idCuenta}: revoca los tokens y elimina el vínculo (204).
 func (c *Controllers) UnlinkEmail(w http.ResponseWriter, r *http.Request) {
-	respondSkeleton(w, c.deps.EmailLinking.Unlink(r.Context(), travelerIDFrom(r.Context()), r.PathValue("idCuenta")))
+	if err := c.deps.EmailLinking.Unlink(r.Context(), travelerIDFrom(r.Context()), r.PathValue("idCuenta")); err != nil {
+		writeEmailLinkError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

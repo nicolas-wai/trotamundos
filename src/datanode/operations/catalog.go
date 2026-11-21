@@ -107,7 +107,21 @@ const (
 	ArrangementDelete              = "arrangement.delete"
 )
 
-// DefaultCatalog devuelve el catálogo con las operaciones de las Fases 2 (Autenticación) y 3 (Arreglos de viaje).
+// Nombres de recursos de la Fase 4 (vinculación de correo, ingesta de proveedores y avisos).
+const (
+	DirectoryTravelerList          = "directory.traveler.list"
+	DirectoryLinkedAccountRegister = "directory.linked_account.register"
+	DirectoryLinkedAccountList     = "directory.linked_account.list"
+	DirectoryLinkedAccountRemove   = "directory.linked_account.remove"
+	DirectoryProviderNoticeSave    = "directory.provider_notice.save"
+	DirectoryProviderNoticeList    = "directory.provider_notice.list"
+	DirectoryProviderNoticeClear   = "directory.provider_notice.clear"
+	LinkedAccountSave              = "linked_account.save"
+	LinkedAccountFind              = "linked_account.find"
+	LinkedAccountDelete            = "linked_account.delete"
+)
+
+// DefaultCatalog devuelve el catálogo con las operaciones de las Fases 2 (Autenticación), 3 (Arreglos de viaje) y 4 (Integraciones).
 func DefaultCatalog() *Catalog {
 	c := NewCatalog()
 	for _, op := range []Operation{
@@ -127,10 +141,23 @@ func DefaultCatalog() *Catalog {
 		{TripFindByID, Read, ScopeShard, `SELECT id_viaje, id_viajero, nombre, destino, fecha_inicio, fecha_fin, estado FROM trips WHERE id_viaje = ? AND id_viajero = ?`, []string{"idViaje", "idViajero"}, ""},
 		// Dashboard: solo columnas críticas, sin detalle ni remitente [ADR-17].
 		{ArrangementListSummaries, Read, ScopeShard, `SELECT id_arreglo, id_viaje, tipo, titulo, origen, estado, fecha_inicio, fecha_fin FROM arrangements WHERE id_viajero = ? ORDER BY fecha_inicio, id_arreglo`, []string{"idViajero"}, ""},
-		{ArrangementFindByID, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, ""},
-		{ArrangementFindByDeduplication, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en FROM arrangements WHERE clave_deduplicacion = ? AND id_viajero = ?`, []string{"claveDeduplicacion", "idViajero"}, ""},
-		{ArrangementSave, Write, ScopeShard, `INSERT INTO arrangements (id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_arreglo) DO UPDATE SET id_viaje = excluded.id_viaje, tipo = excluded.tipo, titulo = excluded.titulo, origen = excluded.origen, remitente = excluded.remitente, estado = excluded.estado, detalle = excluded.detalle, clave_deduplicacion = excluded.clave_deduplicacion, fecha_inicio = excluded.fecha_inicio, fecha_fin = excluded.fecha_fin, generado_en_fuente = excluded.generado_en_fuente, actualizado_en = excluded.actualizado_en WHERE arrangements.id_viajero = excluded.id_viajero`, []string{"idArreglo", "idViaje", "idViajero", "tipo", "titulo", "origen", "remitente", "estado", "detalle", "claveDeduplicacion", "fechaInicio", "fechaFin", "generadoEnFuente", "actualizadoEn"}, "ARREGLO"},
+		{ArrangementFindByID, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, ""},
+		{ArrangementFindByDeduplication, Read, ScopeShard, `SELECT id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en FROM arrangements WHERE clave_deduplicacion = ? AND id_viajero = ?`, []string{"claveDeduplicacion", "idViajero"}, ""},
+		{ArrangementSave, Write, ScopeShard, `INSERT INTO arrangements (id_arreglo, id_viaje, id_viajero, tipo, titulo, origen, remitente, estado, detalle, clave_deduplicacion, fecha_inicio, fecha_fin, generado_en_fuente, recibido_en, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_arreglo) DO UPDATE SET id_viaje = excluded.id_viaje, tipo = excluded.tipo, titulo = excluded.titulo, origen = excluded.origen, remitente = excluded.remitente, estado = excluded.estado, detalle = excluded.detalle, clave_deduplicacion = excluded.clave_deduplicacion, fecha_inicio = excluded.fecha_inicio, fecha_fin = excluded.fecha_fin, generado_en_fuente = excluded.generado_en_fuente, recibido_en = excluded.recibido_en, actualizado_en = excluded.actualizado_en WHERE arrangements.id_viajero = excluded.id_viajero`, []string{"idArreglo", "idViaje", "idViajero", "tipo", "titulo", "origen", "remitente", "estado", "detalle", "claveDeduplicacion", "fechaInicio", "fechaFin", "generadoEnFuente", "recibidoEn", "actualizadoEn"}, "ARREGLO"},
 		{ArrangementDelete, Write, ScopeShard, `DELETE FROM arrangements WHERE id_arreglo = ? AND id_viajero = ?`, []string{"idArreglo", "idViajero"}, "ARREGLO"},
+
+		// Fase 4: directorio de viajeros y cuentas vinculadas (lo recorre el planificador de sondeo) y avisos E2.
+		{DirectoryTravelerList, Read, ScopeDirectory, `SELECT id_viajero FROM traveler_directory ORDER BY id_viajero`, nil, ""},
+		{DirectoryLinkedAccountRegister, Write, ScopeDirectory, `INSERT OR REPLACE INTO linked_account_directory (id_cuenta, id_viajero, proveedor) VALUES (?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor"}, "PERFIL"},
+		{DirectoryLinkedAccountList, Read, ScopeDirectory, `SELECT id_cuenta, id_viajero, proveedor FROM linked_account_directory ORDER BY id_cuenta`, nil, ""},
+		{DirectoryLinkedAccountRemove, Write, ScopeDirectory, `DELETE FROM linked_account_directory WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
+		{DirectoryProviderNoticeSave, Write, ScopeDirectory, `INSERT OR REPLACE INTO provider_notices (id_proveedor, id_viajero, mensaje, proximo_intento) VALUES (?, ?, ?, ?)`, []string{"idProveedor", "idViajero", "mensaje", "proximoIntento"}, "PERFIL"},
+		{DirectoryProviderNoticeList, Read, ScopeDirectory, `SELECT id_proveedor, id_viajero, mensaje, proximo_intento FROM provider_notices ORDER BY id_proveedor`, nil, ""},
+		{DirectoryProviderNoticeClear, Write, ScopeDirectory, `DELETE FROM provider_notices WHERE id_proveedor = ?`, []string{"idProveedor"}, "PERFIL"},
+		// Cuentas de correo vinculadas (tokens OAuth cifrados, en base64) en el shard del viajero [ADR-15].
+		{LinkedAccountSave, Write, ScopeShard, `INSERT OR REPLACE INTO linked_email_accounts (id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor", "encryptedAccessToken", "encryptedRefreshToken", "estado"}, "PERFIL"},
+		{LinkedAccountFind, Read, ScopeShard, `SELECT id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, ""},
+		{LinkedAccountDelete, Write, ScopeShard, `DELETE FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
 	} {
 		c.Register(op)
 	}

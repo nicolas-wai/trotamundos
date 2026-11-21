@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -119,4 +120,64 @@ func str(v any) string {
 		return fmt.Sprint(v)
 	}
 	return s
+}
+
+// QueueLinkedEmailAccountRepository [ADR-09][ADR-15] Implementa LinkedEmailAccountRepository sobre la cola de
+// prioridades. Los tokens llegan ya cifrados y se guardan en base64; además registra la cuenta en el directorio ◇
+// para que el planificador de sondeo la encuentre sin recorrer los shards.
+type QueueLinkedEmailAccountRepository struct{ data ports.DataGateway }
+
+var _ application.LinkedEmailAccountRepository = (*QueueLinkedEmailAccountRepository)(nil)
+
+// NewQueueLinkedEmailAccountRepository crea el repositorio.
+func NewQueueLinkedEmailAccountRepository(data ports.DataGateway) *QueueLinkedEmailAccountRepository {
+	return &QueueLinkedEmailAccountRepository{data: data}
+}
+
+// Save guarda la cuenta en el shard del viajero y la registra en el directorio.
+func (r *QueueLinkedEmailAccountRepository) Save(ctx context.Context, a domain.LinkedEmailAccount) error {
+	_, err := r.data.Write(ctx, a.TravelerID, operations.LinkedAccountSave, map[string]any{
+		"idCuenta": a.AccountID, "idViajero": a.TravelerID, "proveedor": a.Provider,
+		"encryptedAccessToken":  base64.StdEncoding.EncodeToString(a.EncryptedAccessToken),
+		"encryptedRefreshToken": base64.StdEncoding.EncodeToString(a.EncryptedRefreshToken),
+		"estado":                string(a.Status),
+	})
+	if err != nil {
+		return err
+	}
+	_, err = r.data.Write(ctx, "", operations.DirectoryLinkedAccountRegister, map[string]any{
+		"idCuenta": a.AccountID, "idViajero": a.TravelerID, "proveedor": a.Provider,
+	})
+	return err
+}
+
+// FindByID lee la cuenta del shard del viajero.
+func (r *QueueLinkedEmailAccountRepository) FindByID(ctx context.Context, travelerID, accountID string) (domain.LinkedEmailAccount, error) {
+	res, err := r.data.Read(ctx, travelerID, operations.LinkedAccountFind, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	if err != nil {
+		return domain.LinkedEmailAccount{}, err
+	}
+	if len(res.Rows) == 0 {
+		return domain.LinkedEmailAccount{}, application.ErrLinkedAccountNotFound
+	}
+	row := res.Rows[0]
+	access, _ := base64.StdEncoding.DecodeString(str(row["encrypted_access_token"]))
+	refresh, _ := base64.StdEncoding.DecodeString(str(row["encrypted_refresh_token"]))
+	return domain.LinkedEmailAccount{
+		AccountID: str(row["id_cuenta"]), TravelerID: str(row["id_viajero"]), Provider: str(row["proveedor"]),
+		EncryptedAccessToken: access, EncryptedRefreshToken: refresh, Status: domain.EmailAccountStatus(str(row["estado"])),
+	}, nil
+}
+
+// Delete borra la cuenta del shard y del directorio.
+func (r *QueueLinkedEmailAccountRepository) Delete(ctx context.Context, travelerID, accountID string) error {
+	res, err := r.data.Write(ctx, travelerID, operations.LinkedAccountDelete, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected == 0 {
+		return application.ErrLinkedAccountNotFound
+	}
+	_, err = r.data.Write(ctx, "", operations.DirectoryLinkedAccountRemove, map[string]any{"idCuenta": accountID, "idViajero": travelerID})
+	return err
 }

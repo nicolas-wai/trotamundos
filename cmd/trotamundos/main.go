@@ -1,5 +1,6 @@
 // Comando trotamundos: raíz de composición que arma una región completa (AD §3.1). [ADR-21]
-// Fase 2: LoadBalancer → N réplicas → cola de prioridades → nodo de datos primario/pasivo (src/region).
+// Fases 2-4: LoadBalancer → N réplicas → cola de prioridades → nodo de datos primario/pasivo, más cola P2P e
+// integraciones externas con proveedores simulados (src/region).
 package main
 
 import (
@@ -22,6 +23,9 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("configuración inválida: %v", err)
+	}
+	if os.Getenv("TROTAMUNDOS_POLLING") == "" {
+		cfg.PollingEnabled = true // el binario sondea proveedores por defecto (se apaga con TROTAMUNDOS_POLLING=false)
 	}
 	if err := run(cfg); err != nil {
 		log.Fatal(err)

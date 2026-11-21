@@ -16,6 +16,8 @@ var (
 	ErrRefreshNotFound    = errors.New("refresh token no encontrado")
 	ErrInvalidCredentials = errors.New("credenciales inválidas")
 	ErrValidation         = errors.New("datos inválidos")
+	// ErrLinkedAccountNotFound: la cuenta de correo no existe o es de otro viajero (no se revela cuál). [ADR-15]
+	ErrLinkedAccountNotFound = errors.New("cuenta de correo vinculada no encontrada")
 )
 
 // TravelerRepository es el puerto de persistencia del agregado Cuenta del viajero.
@@ -48,4 +50,14 @@ type PreferencesRepository interface {
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) error
+}
+
+// LinkedEmailAccountRepository persiste las cuentas de correo vinculadas por OAuth (tokens ya cifrados). [ADR-15]
+// El adapter lo implementa sobre PriorityQueuePort y mantiene el directorio que usa el planificador de sondeo.
+type LinkedEmailAccountRepository interface {
+	Save(ctx context.Context, account domain.LinkedEmailAccount) error
+	// FindByID devuelve ErrLinkedAccountNotFound si no existe o no es del viajero.
+	FindByID(ctx context.Context, travelerID, accountID string) (domain.LinkedEmailAccount, error)
+	// Delete devuelve ErrLinkedAccountNotFound si no había nada que borrar.
+	Delete(ctx context.Context, travelerID, accountID string) error
 }

@@ -25,6 +25,7 @@ const (
 	NoEncontrado             = "NO_ENCONTRADO"
 	Conflicto                = "CONFLICTO"
 	ModuloNoDisponible       = "MODULO_NO_DISPONIBLE"
+	CodigoOAuthInvalido      = "CODIGO_OAUTH_INVALIDO"
 	ErrorInterno             = "ERROR_INTERNO"
 )
 

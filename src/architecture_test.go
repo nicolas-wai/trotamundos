@@ -143,3 +143,50 @@ func TestDirectoryLayoutMatchesArchitecture(t *testing.T) {
 		t.Fatalf("faltan directorios de la arquitectura: %v", missing)
 	}
 }
+
+// Arreglos de viaje e Integraciones externas solo se comunican por la cola P2P y el bus de eventos (ADR-04, ADR-07):
+// ningún archivo de travelarrangements puede importar integrations.
+func TestTravelArrangementsDoesNotImportIntegrations(t *testing.T) {
+	var violations []string
+	err := filepath.WalkDir("replica/travelarrangements", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		for _, imp := range file.Imports {
+			if p, _ := strconv.Unquote(imp.Path.Value); strings.HasPrefix(p, modulePath+"/replica/integrations") {
+				violations = append(violations, fmt.Sprintf("%s importa %q", filepath.ToSlash(path), p))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("travelarrangements no puede depender de integrations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// Los puertos de salida de proveedores no deben conocer a sus adapters concretos ni a los stubs.
+func TestPortsDoNotImportStubsOrAdapters(t *testing.T) {
+	entries, _ := os.ReadDir("ports")
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join("ports", e.Name()), nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range file.Imports {
+			p, _ := strconv.Unquote(imp.Path.Value)
+			if strings.HasPrefix(p, modulePath+"/stubs") || strings.Contains(p, "/adapters") {
+				t.Errorf("ports/%s importa %q", e.Name(), p)
+			}
+		}
+	}
+}

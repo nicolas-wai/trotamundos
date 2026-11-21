@@ -64,12 +64,18 @@ func (s *queueSpy) since(mark int) []events.QueuedOperation {
 }
 
 // newEnv arma una región completa con SQLite real en un directorio temporal e intervalos acelerados.
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { t.Helper(); return newEnvWith(t, nil) }
+
+// newEnvWith es newEnv con un ajuste previo de la configuración de la región (p. ej. activar el sondeo).
+func newEnvWith(t *testing.T, tune func(*config.RegionConfig)) *env {
 	t.Helper()
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.HeartbeatInterval = 20 * time.Millisecond
 	cfg.ShardCount = 3
+	if tune != nil {
+		tune(&cfg)
+	}
 	clock := &testClock{t: time.Now()}
 	spy := &queueSpy{}
 	reg, err := region.New(cfg, region.Options{Clock: clock.Now, PasswordCost: 4, OnQueuedOperation: spy.record})

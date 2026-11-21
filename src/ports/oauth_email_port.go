@@ -2,7 +2,16 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+// Errores del flujo OAuth del correo.
+var (
+	// ErrInvalidAuthorizationCode: el proveedor rechazó el código de autorización (inválido, usado o vencido).
+	ErrInvalidAuthorizationCode = errors.New("código de autorización inválido")
+	// ErrOAuthAccountRevoked: la cuenta ya fue revocada en el proveedor.
+	ErrOAuthAccountRevoked = errors.New("cuenta OAuth revocada")
 )
 
 // OAuthTokens son los tokens OAuth 2.0 obtenidos del proveedor de correo.

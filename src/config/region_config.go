@@ -27,6 +27,12 @@ type RegionConfig struct {
 	AccessTokenTTL         time.Duration // Vida del access token, 900 s [ADR-16]
 	RefreshTokenTTL        time.Duration // Vida del refresh token, 7 días [ADR-16]
 	JWTSecret              string        // [Prototipo] secreto HS256 de desarrollo
+	TokenEncryptionKey     string        // [Prototipo] clave para cifrar en reposo los tokens OAuth [ADR-15]
+	PollingEnabled         bool          // activa el planificador de sondeo de proveedores [ADR-05]
+	ProviderMaxRetries     int           // reintentos acotados del circuit breaker [ADR-07]
+	ProviderBackoff        time.Duration // espera base progresiva entre reintentos [ADR-07]
+	ProviderCooldown       time.Duration // tiempo con el circuito abierto antes de probar (semiabierto) [ADR-07]
+	ProviderPollTimeout    time.Duration // límite de cada sondeo a un proveedor
 }
 
 // Default devuelve la configuración por defecto del prototipo.
@@ -44,6 +50,12 @@ func Default() RegionConfig {
 		AccessTokenTTL:         900 * time.Second,
 		RefreshTokenTTL:        7 * 24 * time.Hour,
 		JWTSecret:              "trotamundos-dev-secret",
+		TokenEncryptionKey:     "trotamundos-dev-token-key",
+		PollingEnabled:         false,
+		ProviderMaxRetries:     3,
+		ProviderBackoff:        500 * time.Millisecond,
+		ProviderCooldown:       30 * time.Second,
+		ProviderPollTimeout:    10 * time.Second,
 	}
 }
 
@@ -106,6 +118,18 @@ func LoadFrom(getenv func(string) string) (RegionConfig, error) {
 	dur("TROTAMUNDOS_ACCESS_TOKEN_TTL", &c.AccessTokenTTL)
 	dur("TROTAMUNDOS_REFRESH_TOKEN_TTL", &c.RefreshTokenTTL)
 	str("TROTAMUNDOS_JWT_SECRET", &c.JWTSecret)
+	str("TROTAMUNDOS_TOKEN_KEY", &c.TokenEncryptionKey)
+	num("TROTAMUNDOS_PROVIDER_RETRIES", &c.ProviderMaxRetries)
+	dur("TROTAMUNDOS_PROVIDER_BACKOFF", &c.ProviderBackoff)
+	dur("TROTAMUNDOS_PROVIDER_COOLDOWN", &c.ProviderCooldown)
+	dur("TROTAMUNDOS_PROVIDER_POLL_TIMEOUT", &c.ProviderPollTimeout)
+	if v := getenv("TROTAMUNDOS_POLLING"); v != "" {
+		b, err := strconv.ParseBool(v)
+		setErr("TROTAMUNDOS_POLLING", err)
+		if err == nil {
+			c.PollingEnabled = b
+		}
+	}
 
 	if firstErr != nil {
 		return c, firstErr
@@ -124,6 +148,10 @@ func (c RegionConfig) Validate() error {
 		return fmt.Errorf("se requiere al menos un shard")
 	case c.HeartbeatInterval <= 0 || c.HeartbeatMissThreshold < 1:
 		return fmt.Errorf("parámetros de heartbeat inválidos")
+	case c.ProviderMaxRetries < 0 || c.ProviderBackoff < 0 || c.ProviderCooldown <= 0 || c.ProviderPollTimeout <= 0:
+		return fmt.Errorf("parámetros del circuit breaker inválidos")
+	case c.TokenEncryptionKey == "":
+		return fmt.Errorf("falta la clave de cifrado de tokens OAuth")
 	case c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0:
 		return fmt.Errorf("los TTL de los tokens deben ser positivos")
 	}

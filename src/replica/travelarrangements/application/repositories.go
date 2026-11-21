@@ -3,6 +3,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
@@ -28,4 +29,19 @@ type ArrangementRepository interface {
 	Save(ctx context.Context, arrangement domain.TravelArrangement) error
 	// Delete devuelve ErrNotFound si no hay nada que borrar.
 	Delete(ctx context.Context, travelerID, arrangementID string) error
+}
+
+// ProviderNoticeRecord es un aviso persistido de proveedor degradado (E2). TravelerID vacío = afecta a todos. [ADR-07]
+type ProviderNoticeRecord struct {
+	ProviderID string
+	TravelerID string
+	Message    string
+	RetryAt    time.Time
+}
+
+// ProviderNoticeRepository persiste los avisos E2 para que cualquier réplica stateless los muestre. [ADR-07]
+type ProviderNoticeRepository interface {
+	Save(ctx context.Context, notice ProviderNoticeRecord) error
+	Clear(ctx context.Context, providerID string) error
+	List(ctx context.Context) ([]ProviderNoticeRecord, error)
 }

@@ -133,7 +133,7 @@ func (r *QueueArrangementRepository) Save(ctx context.Context, a domain.TravelAr
 		"titulo": a.Title, "origen": string(a.Origin), "remitente": nullable(string(a.Sender)), "estado": string(a.Status),
 		"detalle": string(detail), "claveDeduplicacion": nullable(string(a.DeduplicationKey)),
 		"fechaInicio": formatTime(a.StartAt), "fechaFin": formatTime(a.EndAt),
-		"generadoEnFuente": formatTime(a.GeneratedAtSource), "actualizadoEn": formatTime(a.UpdatedAt),
+		"generadoEnFuente": formatTime(a.GeneratedAtSource), "recibidoEn": formatTime(a.ReceivedAt), "actualizadoEn": formatTime(a.UpdatedAt),
 	})
 	return err
 }
@@ -163,7 +163,7 @@ func (r *QueueArrangementRepository) fromRow(row map[string]any) (domain.TravelA
 		Sender: domain.Sender(str(row, "remitente")), Status: domain.Status(str(row, "estado")),
 		Detail: detail, DeduplicationKey: domain.DeduplicationKey(str(row, "clave_deduplicacion")),
 		StartAt: parseTime(str(row, "fecha_inicio")), EndAt: parseTime(str(row, "fecha_fin")),
-		GeneratedAtSource: parseTime(str(row, "generado_en_fuente")), UpdatedAt: parseTime(str(row, "actualizado_en")),
+		GeneratedAtSource: parseTime(str(row, "generado_en_fuente")), ReceivedAt: parseTime(str(row, "recibido_en")), UpdatedAt: parseTime(str(row, "actualizado_en")),
 	}, nil
 }
 
@@ -207,4 +207,46 @@ func parseTime(s string) time.Time {
 		return t.UTC()
 	}
 	return time.Time{}
+}
+
+// QueueProviderNoticeRepository [ADR-07][ADR-09] Implementa ProviderNoticeRepository sobre la cola de prioridades,
+// en la partición directory ◇ (los avisos son por proveedor, no por viajero) para que toda réplica los vea.
+type QueueProviderNoticeRepository struct{ data ports.DataGateway }
+
+var _ application.ProviderNoticeRepository = (*QueueProviderNoticeRepository)(nil)
+
+// NewQueueProviderNoticeRepository crea el repositorio.
+func NewQueueProviderNoticeRepository(data ports.DataGateway) *QueueProviderNoticeRepository {
+	return &QueueProviderNoticeRepository{data: data}
+}
+
+// Save guarda (o reemplaza) el aviso del proveedor.
+func (r *QueueProviderNoticeRepository) Save(ctx context.Context, n application.ProviderNoticeRecord) error {
+	_, err := r.data.Write(ctx, "", operations.DirectoryProviderNoticeSave, map[string]any{
+		"idProveedor": n.ProviderID, "idViajero": nullable(n.TravelerID), "mensaje": n.Message,
+		"proximoIntento": n.RetryAt.UTC().Format(time.RFC3339Nano),
+	})
+	return err
+}
+
+// Clear retira el aviso del proveedor.
+func (r *QueueProviderNoticeRepository) Clear(ctx context.Context, providerID string) error {
+	_, err := r.data.Write(ctx, "", operations.DirectoryProviderNoticeClear, map[string]any{"idProveedor": providerID})
+	return err
+}
+
+// List devuelve todos los avisos vigentes.
+func (r *QueueProviderNoticeRepository) List(ctx context.Context) ([]application.ProviderNoticeRecord, error) {
+	res, err := r.data.Read(ctx, "", operations.DirectoryProviderNoticeList, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]application.ProviderNoticeRecord, 0, len(res.Rows))
+	for _, row := range res.Rows {
+		out = append(out, application.ProviderNoticeRecord{
+			ProviderID: str(row, "id_proveedor"), TravelerID: str(row, "id_viajero"),
+			Message: str(row, "mensaje"), RetryAt: parseTime(str(row, "proximo_intento")),
+		})
+	}
+	return out, nil
 }

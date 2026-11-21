@@ -2,6 +2,9 @@
 package providerport
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/domain"
 )
@@ -26,4 +29,17 @@ func (r *Registry) Register(adapter ports.ExternalProviderPort) {
 func (r *Registry) Adapter(t domain.ProviderType) (ports.ExternalProviderPort, bool) {
 	a, ok := r.adapters[t]
 	return a, ok
+}
+
+// ClassifyError normaliza un error de transporte del proveedor a los errores del puerto [ADR-05]:
+// credencial inválida y respuesta no parseable se conservan; cualquier otra falla (red, timeout, 5xx)
+// es ErrProviderUnavailable.
+func ClassifyError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ports.ErrInvalidCredential), errors.Is(err, ports.ErrUnparseableResponse), errors.Is(err, ports.ErrProviderUnavailable):
+		return err
+	}
+	return fmt.Errorf("%w: %v", ports.ErrProviderUnavailable, err)
 }

@@ -16,9 +16,11 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/datanode"
 	"github.com/nicolas-wai/trotamundos/src/loadbalancer"
+	"github.com/nicolas-wai/trotamundos/src/messagequeue"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 	"github.com/nicolas-wai/trotamundos/src/priorityqueue"
 	"github.com/nicolas-wai/trotamundos/src/replica"
+	"github.com/nicolas-wai/trotamundos/src/replica/integrations"
 	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
 	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
@@ -43,6 +45,14 @@ func (o observedQueue) Submit(ctx context.Context, op events.QueuedOperation) (p
 	return o.inner.Submit(ctx, op)
 }
 
+// ExternalAPIs agrupa los sistemas externos simulados que la región inyecta detrás de los puertos. [Prototipo]
+type ExternalAPIs struct {
+	OAuth        *stubs.MockOAuth2AuthAdapter
+	Email        *stubs.StubEmailProviderAPI
+	Agency       *stubs.StubAgencyAPI
+	TravelSystem *stubs.StubTravelSystemAPI
+}
+
 // Region agrupa todos los contenedores de una región.
 type Region struct {
 	Config config.RegionConfig
@@ -58,6 +68,12 @@ type Region struct {
 
 	LB        *loadbalancer.LoadBalancer
 	LBMonitor *loadbalancer.ReplicaHeartbeatMonitor
+
+	// Mensajería e integraciones de la región (Fase 4). La cola P2P tiene un único consumidor [ADR-04]: la
+	// réplica 0 ejecuta el consumidor y el planificador de sondeo; el resto solo atiende la API.
+	MessageQueue *messagequeue.InMemoryMessageQueue // cola P2P [ADR-04]
+	EventBus     *messagequeue.InMemoryEventBus     // bus interno, E2 [ADR-07]
+	ExternalAPIs ExternalAPIs                       // sistemas externos simulados [Prototipo]
 
 	mu             sync.Mutex
 	swaps          []events.ResponsibilitySwap
@@ -103,10 +119,19 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 	if opts.OnQueuedOperation != nil {
 		submitter = observedQueue{inner: r.Queue, observe: opts.OnQueuedOperation}
 	}
+	r.MessageQueue = messagequeue.NewInMemoryMessageQueue()
+	r.EventBus = messagequeue.NewInMemoryEventBus()
+	r.ExternalAPIs = ExternalAPIs{
+		OAuth: stubs.NewMockOAuth2AuthAdapter(), Email: stubs.NewStubEmailProviderAPI(),
+		Agency: stubs.NewStubAgencyAPI(), TravelSystem: stubs.NewStubTravelSystemAPI(),
+	}
 	for i := 0; i < cfg.ReplicaCount; i++ {
 		id := ReplicaID(cfg, i)
 		r.Replicas = append(r.Replicas, replica.New(id, cfg, replica.Dependencies{
 			Queue: submitter, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
+			MessageQueue: r.MessageQueue, EventBus: r.EventBus, OAuth: r.ExternalAPIs.OAuth,
+			Providers:       integrations.Clients{Mail: r.ExternalAPIs.Email, Agency: r.ExternalAPIs.Agency, TravelSystem: r.ExternalAPIs.TravelSystem},
+			RunIntegrations: i == 0,
 		}))
 		r.ReplicaHeartbeats.Track(id)
 	}
@@ -142,6 +167,12 @@ func (r *Region) Start(ctx context.Context) {
 		rctx, cancel := context.WithCancel(ctx)
 		r.replicaCancels = append(r.replicaCancels, cancel)
 		run(rep.Heartbeat.Run, rctx)
+		if rep.Consumer != nil {
+			run(rep.Consumer.Run, ctx) // único consumidor de la cola P2P [ADR-04]
+		}
+		if rep.Integrations != nil && r.Config.PollingEnabled {
+			run(rep.Integrations.Scheduler.Run, ctx) // sondeo cada <= 2 min [ADR-05][QA-01]
+		}
 	}
 	if r.LBMonitor != nil {
 		run(r.LBMonitor.Run, ctx)

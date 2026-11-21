@@ -237,19 +237,19 @@ src/
 
 **Tareas:**
 
-- [ ] `stubs`: tres APIs simuladas con formatos propios distintos (p. ej. correo con texto semiestructurado y remitente, agencia con JSON anidado, sistema de viajes con códigos IATA), datos determinísticos, la **misma reserva** presente en dos fuentes (para deduplicar) y modo de falla configurable (errores/timeouts).
-- [ ] `MockOAuth2AuthAdapter`: `intercambiarCodigo`, `refrescar`, `revocar` determinísticos; códigos inválidos → error [ADR15].
-- [ ] Cifrado de tokens OAuth en reposo con AES-GCM (biblioteca estándar `crypto/aes`) detrás de un puerto `TokenCipher`; nunca se guarda contraseña del correo [ADR15].
-- [ ] `POST /correos` `201 { idCuenta, proveedor, estado: "VINCULADA" }` y `DELETE /correos/{idCuenta}` `204` (revoca y elimina el vínculo).
-- [ ] Adapters por tipo que implementan `ExternalProviderPort.sondear(referencia, desde)` y traducen al modelo del puerto; errores `ProveedorNoDisponible`, `CredencialInvalida`, `RespuestaNoParseable` [ADR05].
-- [ ] `providerport`: registro de adapters por tipo (agregar un tipo = registrar un adapter, QA10/QA14).
-- [ ] `Broker`: normaliza a E1 `ActualizacionProveedorNormalizada` (incluye `claveDeduplicacion`, `generadoEnFuente`, `recibidoEn`, `origenRemitente`) y publica en la cola P2P. La lógica nunca recibe datos sin formatear [ADR06].
-- [ ] `InMemoryMessageQueue`: `publicar`, `consumir`, `confirmar`; un único consumidor; mensajes no confirmados se re-entregan (tolerancia a caída del consumidor) [ADR04].
-- [ ] `ProviderCircuitBreaker` por proveedor: estados CERRADO/ABIERTO/SEMIABIERTO, N reintentos con backoff progresivo, publica E2 `ProveedorDegradado` al abrir [ADR07].
-- [ ] `PollingScheduler`: dispara sondeos cada ≤ 2 min (intervalo de `RegionConfig`) sobre cuentas vinculadas y proveedores; omite proveedores con circuito abierto [ADR05].
-- [ ] `UpdateConsumer`: consume E1, delega en `travelarrangements` y confirma tras escritura exitosa [ADR04].
-- [ ] `travelarrangements`: aplicar E1 (crear/modificar/cancelar), deduplicar por `claveDeduplicacion` fusionando información, marcar `origen` y `remitente` (US03), y exponer E2 como `avisosProveedores` en el dashboard.
-- [ ] Registrar `recibidoEn` → visible para medir QA01.
+- [x] `stubs`: tres APIs simuladas con formatos propios distintos (p. ej. correo con texto semiestructurado y remitente, agencia con JSON anidado, sistema de viajes con códigos IATA), datos determinísticos, la **misma reserva** presente en dos fuentes (para deduplicar) y modo de falla configurable (errores/timeouts).
+- [x] `MockOAuth2AuthAdapter`: `intercambiarCodigo`, `refrescar`, `revocar` determinísticos; códigos inválidos → error [ADR15].
+- [x] Cifrado de tokens OAuth en reposo con AES-GCM (biblioteca estándar `crypto/aes`) detrás de un puerto `TokenCipher`; nunca se guarda contraseña del correo [ADR15].
+- [x] `POST /correos` `201 { idCuenta, proveedor, estado: "VINCULADA" }` y `DELETE /correos/{idCuenta}` `204` (revoca y elimina el vínculo).
+- [x] Adapters por tipo que implementan `ExternalProviderPort.sondear(referencia, desde)` y traducen al modelo del puerto; errores `ProveedorNoDisponible`, `CredencialInvalida`, `RespuestaNoParseable` [ADR05].
+- [x] `providerport`: registro de adapters por tipo (agregar un tipo = registrar un adapter, QA10/QA14).
+- [x] `Broker`: normaliza a E1 `ActualizacionProveedorNormalizada` (incluye `claveDeduplicacion`, `generadoEnFuente`, `recibidoEn`, `origenRemitente`) y publica en la cola P2P. La lógica nunca recibe datos sin formatear [ADR06].
+- [x] `InMemoryMessageQueue`: `publicar`, `consumir`, `confirmar`; un único consumidor; mensajes no confirmados se re-entregan (tolerancia a caída del consumidor) [ADR04].
+- [x] `ProviderCircuitBreaker` por proveedor: estados CERRADO/ABIERTO/SEMIABIERTO, N reintentos con backoff progresivo, publica E2 `ProveedorDegradado` al abrir [ADR07].
+- [x] `PollingScheduler`: dispara sondeos cada ≤ 2 min (intervalo de `RegionConfig`) sobre cuentas vinculadas y proveedores; omite proveedores con circuito abierto [ADR05].
+- [x] `UpdateConsumer`: consume E1, delega en `travelarrangements` y confirma tras escritura exitosa [ADR04].
+- [x] `travelarrangements`: aplicar E1 (crear/modificar/cancelar), deduplicar por `claveDeduplicacion` fusionando información, marcar `origen` y `remitente` (US03), y exponer E2 como `avisosProveedores` en el dashboard.
+- [x] Registrar `recibidoEn` → visible para medir QA01.
 
 **Criterio de verificación** (`go test ./...`):
 
@@ -263,6 +263,16 @@ src/
 - Test de arquitectura: `travelarrangements` no importa `integrations` (solo se comunican por la cola P2P y el bus de eventos).
 
 ---
+
+> Estado (Fase 4): `go build`, `go vet` y `go test ./...` (también con `-race`) en verde; smoke del binario con `curl` (registro → `POST /correos` → dashboard con las 4 reservas y `origen` EMAIL/AGENCIA/VIAJES). Decisiones de implementación a revisar:
+>
+> - **Réplica líder:** la cola P2P admite un único consumidor [ADR-04], así que la región designa a la réplica 0 para ejecutar el `UpdateConsumer` y el `PollingScheduler`. Si esa réplica cae (heartbeat), el sondeo no migra a otra (fuera de alcance del prototipo).
+> - **Sondeo opt-in:** `RegionConfig.PollingEnabled` (`TROTAMUNDOS_POLLING`). `main` lo activa por defecto; los tests heredados lo dejan apagado para no mezclar operaciones E8 de fondo con sus espías.
+> - **Objetivos de sondeo ◇:** cuentas de correo vinculadas (directorio `linked_account_directory`) y, para cada viajero registrado, la agencia y el sistema de viajes del prototipo (`traveler_directory`). Circuit breaker por proveedor (`email:<proveedor>`, `agencia:agencia-sol`, `viajes:sistema-viajes`).
+> - **Avisos E2 ◇:** se persisten en la partición `directory` (`provider_notices`) para que cualquier réplica stateless los muestre; el cierre del circuito publica E2 `CERRADO` y retira el aviso.
+> - **Viaje de las reservas ingeridas ◇:** E1 no trae `idViaje`; se usa el viaje vigente que contiene la fecha de inicio, si no el primero vigente, si no el viaje demo.
+> - **Contrato:** el único agregado fuera de AD es el código de error `CODIGO_OAUTH_INVALIDO` (400) para un `authorizationCode` rechazado.
+
 
 ## Fase 5 — Itinerarios compartidos y recomendaciones con human-in-the-loop
 

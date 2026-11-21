@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
-	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
 
@@ -19,12 +17,13 @@ const maxTitleLength = 200
 
 // Service implementa el caso de uso de Arreglos de viaje de la Fase 3 (dashboard y CRUD manual)
 // sobre puertos propios. [ADR-02] Las operaciones de datos salen por los repositorios, que el adapter
-// implementa sobre PriorityQueuePort [ADR-09]. La ingesta de proveedores (E1/E2) llega en la Fase 4.
+// implementa sobre PriorityQueuePort [ADR-09]. La ingesta de proveedores (E1/E2) está en provider_ingestion.go. [ADR-04]
 type Service struct {
 	trips        TripRepository
 	arrangements ArrangementRepository
 	registry     *domain.ArrangementTypeRegistry // [QA-10]
 	now          func() time.Time
+	notices      ProviderNoticeRepository // avisos E2 [ADR-07]; nil = sin avisos
 }
 
 var _ TravelArrangementsService = (*Service)(nil)
@@ -41,7 +40,7 @@ func NewService(trips TripRepository, arrangements ArrangementRepository, regist
 }
 
 // GetDashboard arma el dashboard con solo datos críticos [ADR-17]: viajes vigentes con sus arreglos sin detalle.
-// Los viajes completados se retiran de la vista (US03). Los avisos de proveedores llegan en la Fase 4.
+// Los viajes completados se retiran de la vista (US03). Incluye los avisos de proveedores degradados (E2). [ADR-07]
 func (s *Service) GetDashboard(ctx context.Context, travelerID string) (Dashboard, error) {
 	trips, err := s.trips.ListByTraveler(ctx, travelerID)
 	if err != nil {
@@ -67,7 +66,11 @@ func (s *Service) GetDashboard(ctx context.Context, travelerID string) (Dashboar
 		visible = append(visible, t)
 	}
 	sort.SliceStable(visible, func(i, j int) bool { return visible[i].StartDate.Before(visible[j].StartDate) })
-	return Dashboard{Trips: visible, ProviderNotices: []ProviderNotice{}}, nil
+	notices, err := s.providerNotices(ctx, travelerID)
+	if err != nil {
+		return Dashboard{}, err
+	}
+	return Dashboard{Trips: visible, ProviderNotices: notices}, nil
 }
 
 // GetArrangementDetail devuelve el arreglo completo (con detalle) bajo demanda. [ADR-17]
@@ -133,16 +136,6 @@ func (s *Service) ProvisionDemoTrip(ctx context.Context, travelerID string) erro
 
 // DemoTripID es el id determinístico del viaje demo de un viajero.
 func DemoTripID(travelerID string) string { return "demo-" + travelerID }
-
-// ApplyProviderUpdate llega en la Fase 4.
-func (s *Service) ApplyProviderUpdate(context.Context, events.ProviderUpdateNormalized) error {
-	return apierror.ErrNotImplemented
-}
-
-// ReportProviderDegraded llega en la Fase 4.
-func (s *Service) ReportProviderDegraded(context.Context, events.ProviderDegraded) error {
-	return apierror.ErrNotImplemented
-}
 
 // validate comprueba el alta/edición manual (→ ErrValidation, 422) y devuelve el detalle tipado.
 func (s *Service) validate(ctx context.Context, travelerID string, in ArrangementInput) (domain.ArrangementDetail, error) {

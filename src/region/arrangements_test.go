@@ -208,7 +208,9 @@ func TestCrudWritesAndDashboardReadsAreQueuedWithTheirKind(t *testing.T) {
 		kinds, owners = map[string]string{}, map[string]bool{}
 		for _, op := range ops {
 			kinds[op.Recurso] = op.Tipo
-			owners[op.IDViajero] = true
+			if op.IDViajero != "" { // la partición directory ◇ no tiene dueño (avisos de proveedores, Fase 4)
+				owners[op.IDViajero] = true
+			}
 		}
 		return
 	}
@@ -217,7 +219,7 @@ func TestCrudWritesAndDashboardReadsAreQueuedWithTheirKind(t *testing.T) {
 	e.dashboardJSON(t, token)
 	ops := e.spy.since(mark)
 	kinds, owners := resources(ops)
-	if len(ops) == 0 || len(kinds) != 2 || kinds["trip.list"] != events.OperationRead || kinds["arrangement.list_summaries"] != events.OperationRead {
+	if len(ops) == 0 || len(kinds) != 3 || kinds["trip.list"] != events.OperationRead || kinds["arrangement.list_summaries"] != events.OperationRead || kinds["directory.provider_notice.list"] != events.OperationRead {
 		t.Fatalf("el dashboard debe leer viajes y arreglos como LECTURA: %+v", ops)
 	}
 	for _, op := range ops {

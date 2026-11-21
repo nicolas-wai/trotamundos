@@ -55,7 +55,8 @@ type TravelArrangement struct {
 	EndAt             time.Time
 	Detail            ArrangementDetail
 	DeduplicationKey  DeduplicationKey
-	GeneratedAtSource time.Time
+	GeneratedAtSource time.Time // cuándo se generó en la fuente (E1.generadoEnFuente) [QA-01]
+	ReceivedAt        time.Time // cuándo lo recibió Trotamundos (E1.recibidoEn) [QA-01]
 	UpdatedAt         time.Time
 }
 
