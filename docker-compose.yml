@@ -1,0 +1,10 @@
+services:
+  trotamundos:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - trotamundos-data:/app/data
+
+volumes:
+  trotamundos-data:

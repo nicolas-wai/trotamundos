@@ -116,28 +116,28 @@ src/
 
 **Tareas:**
 
-- [ ] `go.mod` (Go 1.26) con dependencias: `modernc.org/sqlite`, `golang.org/x/crypto`, `github.com/golang-jwt/jwt/v5`.
-- [ ] `Makefile` con `run`, `test`, `build`, `vet`, `clean` (borra `data/*.db`).
-- [ ] `Dockerfile` multi-stage + `docker-compose.yml` mínimo: un servicio `trotamundos`, puerto `8080`, volumen `trotamundos-data:/app/data` para los `.db`.
-- [ ] Crear el árbol de §0.3 y eliminar las carpetas placeholder en español de `src/` (están vacías) y `src/aca-va-la-implementacion.md`.
-- [ ] `src/config`: `RegionConfig` (regionId, puertos, cantidad de réplicas, cantidad de shards, intervalo de sondeo ≤ 2 min, heartbeat 10 s / 3 pérdidas, TTL access token 900 s) leído de variables de entorno con defaults.
-- [ ] **Entidades de dominio** (AD §2) en el `domain` de cada módulo, con comentarios de agregado/invariante:
-  - [ ] `authentication/domain`: `Traveler` (raíz de *Cuenta del viajero*), `RefreshToken`, `TravelerPreferences`, `LinkedEmailAccount`, `TrustedSender` ◇ (US03, sin lógica).
-  - [ ] `travelarrangements/domain`: `Trip` (raíz), `TravelArrangement` con `ArrangementType`, `Origin`, `Status`, `DeduplicationKey`, `Sender`; subtipos `Accommodation`, `Flight`, `RentalCar`, `Train`, `Bus` como implementaciones de `ArrangementDetail` y un `ArrangementTypeRegistry` (QA10).
-  - [ ] `permissions/domain`: `SharedItinerary` (raíz), `AccessPermission`, `AccessRequest`.
-  - [ ] `integrations/domain`: `ExternalProvider` (con `CircuitState`), `ProviderUpdate`.
-  - [ ] `recommendations/domain`: `Recommendation` (raíz), `RecommendationFeedback`.
-- [ ] **Contratos** `src/contracts`:
-  - [ ] `httpdto`: un struct por request/response de §6.2 con tags JSON exactos del contrato.
-  - [ ] `apierror`: `ErrorResponse{Codigo, Mensaje}` y constantes (`CREDENCIALES_INVALIDAS`, `REFRESH_REVOCADO_O_EXPIRADO`, `ACCESO_NO_AUTORIZADO`, `TOKEN_EXPIRADO`, `NO_IMPLEMENTADO`, …) + helper de escritura con código HTTP.
-  - [ ] `events`: `ProviderUpdateNormalized` (E1), `ProviderDegraded` (E2), `Heartbeat` (E3), `ResponsibilitySwap` (E4), `StateSync` (E5), `DataWritten` (E6), `AccessRequestCreated` (E7), `QueuedOperation` (E8).
-- [ ] **Puertos** `src/ports` (§6.4): `ExternalProviderPort`, `CircuitBreakerPort`, `MessageQueuePort`, `PriorityQueuePort`, `DataPort`, `TokenServicePort`, `OAuthEmailPort`, `ItineraryPermissionsPort`, `RecommenderPort`, `HistoryPort`, `HeartbeatPort`; más `EventBusPort` (E2, E7 internos) y `OwnerNotifierPort` (E7). Cada uno con su comentario `// [ADR-XX]`.
-- [ ] Puertos de repositorio propios de cada módulo en su `application` (ej. `TripRepository`, `TravelerRepository`, `SharedItineraryRepository`, `PreferencesRepository`).
-- [ ] Interfaces de servicios de aplicación por módulo (ej. `AuthenticationService`, `TravelArrangementsService`, `PermissionsService`) con métodos que devuelven `ErrNotImplemented`.
-- [ ] `replica/api`: router `net/http` con **todas** las rutas de §6.2 (patrones Go 1.22+, en español) apuntando a handlers stub `501`.
-- [ ] Structs vacíos de cada componente de infraestructura: `LoadBalancer`, `ReplicaHeartbeatMonitor`, `PriorityQueueNode`, `DataNodeSwitch`, `DataHeartbeatMonitor`, `DataNode`, `PartitionRouter`, `InMemoryCacheAdapter`, `InMemoryMessageQueue`, `PollingScheduler`, `ProviderCircuitBreaker`, `Broker`, `UpdateConsumer`, `OAuthManager`, `ConcurrentCollector`, `ContentBasedFilteringEngine`, `HITLFeedback`, stubs externos.
-- [ ] `cmd/trotamundos/main.go`: raíz de composición que instancia la región (LB → 2 réplicas) y levanta el servidor con los stubs `501`.
-- [ ] Test de arquitectura `src/architecture_test.go` (usa `go/build` / `go/parser` de la biblioteca estándar) que falla si un paquete `domain`/`application` importa algo fuera de la regla de dependencias.
+- [x] `go.mod` (Go 1.26) con dependencias: `modernc.org/sqlite`, `golang.org/x/crypto`, `github.com/golang-jwt/jwt/v5`.
+- [x] `Makefile` con `run`, `test`, `build`, `vet`, `clean` (borra `data/*.db`).
+- [x] `Dockerfile` multi-stage + `docker-compose.yml` mínimo: un servicio `trotamundos`, puerto `8080`, volumen `trotamundos-data:/app/data` para los `.db`.
+- [x] Crear el árbol de §0.3 y eliminar las carpetas placeholder en español de `src/` (están vacías) y `src/aca-va-la-implementacion.md`.
+- [x] `src/config`: `RegionConfig` (regionId, puertos, cantidad de réplicas, cantidad de shards, intervalo de sondeo ≤ 2 min, heartbeat 10 s / 3 pérdidas, TTL access token 900 s) leído de variables de entorno con defaults.
+- [x] **Entidades de dominio** (AD §2) en el `domain` de cada módulo, con comentarios de agregado/invariante:
+  - [x] `authentication/domain`: `Traveler` (raíz de *Cuenta del viajero*), `RefreshToken`, `TravelerPreferences`, `LinkedEmailAccount`, `TrustedSender` ◇ (US03, sin lógica).
+  - [x] `travelarrangements/domain`: `Trip` (raíz), `TravelArrangement` con `ArrangementType`, `Origin`, `Status`, `DeduplicationKey`, `Sender`; subtipos `Accommodation`, `Flight`, `RentalCar`, `Train`, `Bus` como implementaciones de `ArrangementDetail` y un `ArrangementTypeRegistry` (QA10).
+  - [x] `permissions/domain`: `SharedItinerary` (raíz), `AccessPermission`, `AccessRequest`.
+  - [x] `integrations/domain`: `ExternalProvider` (con `CircuitState`), `ProviderUpdate`.
+  - [x] `recommendations/domain`: `Recommendation` (raíz), `RecommendationFeedback`.
+- [x] **Contratos** `src/contracts`:
+  - [x] `httpdto`: un struct por request/response de §6.2 con tags JSON exactos del contrato.
+  - [x] `apierror`: `ErrorResponse{Codigo, Mensaje}` y constantes (`CREDENCIALES_INVALIDAS`, `REFRESH_REVOCADO_O_EXPIRADO`, `ACCESO_NO_AUTORIZADO`, `TOKEN_EXPIRADO`, `NO_IMPLEMENTADO`, …) + helper de escritura con código HTTP.
+  - [x] `events`: `ProviderUpdateNormalized` (E1), `ProviderDegraded` (E2), `Heartbeat` (E3), `ResponsibilitySwap` (E4), `StateSync` (E5), `DataWritten` (E6), `AccessRequestCreated` (E7), `QueuedOperation` (E8).
+- [x] **Puertos** `src/ports` (§6.4): `ExternalProviderPort`, `CircuitBreakerPort`, `MessageQueuePort`, `PriorityQueuePort`, `DataPort`, `TokenServicePort`, `OAuthEmailPort`, `ItineraryPermissionsPort`, `RecommenderPort`, `HistoryPort`, `HeartbeatPort`; más `EventBusPort` (E2, E7 internos) y `OwnerNotifierPort` (E7). Cada uno con su comentario `// [ADR-XX]`.
+- [x] Puertos de repositorio propios de cada módulo en su `application` (ej. `TripRepository`, `TravelerRepository`, `SharedItineraryRepository`, `PreferencesRepository`).
+- [x] Interfaces de servicios de aplicación por módulo (ej. `AuthenticationService`, `TravelArrangementsService`, `PermissionsService`) con métodos que devuelven `ErrNotImplemented`.
+- [x] `replica/api`: router `net/http` con **todas** las rutas de §6.2 (patrones Go 1.22+, en español) apuntando a handlers stub `501`.
+- [x] Structs vacíos de cada componente de infraestructura: `LoadBalancer`, `ReplicaHeartbeatMonitor`, `PriorityQueueNode`, `DataNodeSwitch`, `DataHeartbeatMonitor`, `DataNode`, `PartitionRouter`, `InMemoryCacheAdapter`, `InMemoryMessageQueue`, `PollingScheduler`, `ProviderCircuitBreaker`, `Broker`, `UpdateConsumer`, `OAuthManager`, `ConcurrentCollector`, `ContentBasedFilteringEngine`, `HITLFeedback`, stubs externos.
+- [x] `cmd/trotamundos/main.go`: raíz de composición que instancia la región (LB → 2 réplicas) y levanta el servidor con los stubs `501`.
+- [x] Test de arquitectura `src/architecture_test.go` (usa `go/build` / `go/parser` de la biblioteca estándar) que falla si un paquete `domain`/`application` importa algo fuera de la regla de dependencias.
 
 **Criterio de verificación:**
 
