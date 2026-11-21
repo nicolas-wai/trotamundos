@@ -7,12 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nicolas-wai/trotamundos/src/ports"
 	authapp "github.com/nicolas-wai/trotamundos/src/replica/authentication/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/integrations/oauthmanager"
 	permapp "github.com/nicolas-wai/trotamundos/src/replica/permissions/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/priorityqueueclient"
 	"github.com/nicolas-wai/trotamundos/src/replica/recommendations"
 	"github.com/nicolas-wai/trotamundos/src/replica/ssr"
+	"github.com/nicolas-wai/trotamundos/src/replica/tokenvalidator"
 	taapp "github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
@@ -24,10 +26,24 @@ func newTestRouter() http.Handler {
 		Profile:        authapp.UnimplementedTravelerProfileService{},
 		Arrangements:   taapp.UnimplementedTravelArrangementsService{},
 		Permissions:    permapp.UnimplementedPermissionsService{},
-		Recommender:    recommendations.NewRecommender(priorityqueueclient.NewClient()),
+		Recommender:    recommendations.NewRecommender(priorityqueueclient.NewClient(nil)),
 		EmailLinking:   oauth,
 		Renderer:       ssr.NewRenderer(),
-	}))
+	}), tokenvalidator.NewValidator(fakeTokens{}))
+}
+
+// fakeTokens acepta únicamente el token "ok" (la validación real se prueba en tokenvalidator y en la integración).
+type fakeTokens struct{ ports.TokenServicePort }
+
+func (fakeTokens) Validate(token string) (ports.Claims, error) {
+	if token == "ok" {
+		return ports.Claims{TravelerID: "v1"}, nil
+	}
+	return ports.Claims{}, ports.ErrTokenInvalid
+}
+
+func isPublic(path string) bool {
+	return path == "/login" || path == "/token/refresh" || path == "/logout" || path == "/registro"
 }
 
 // contractRoutes es la lista independiente de las rutas de AD §6.2 (método y ruta concreta).
@@ -57,20 +73,23 @@ var contractRoutes = []struct{ method, path string }{
 	{"DELETE", "/itinerarios/i1/accesos/v1"},
 }
 
-func TestEveryContractRouteRespondsNotImplemented(t *testing.T) {
+// Las rutas protegidas todavía sin módulo responden 501 NO_IMPLEMENTADO una vez superado el token (Fases 3-5).
+func TestEveryProtectedRouteRespondsNotImplementedWithToken(t *testing.T) {
 	if len(contractRoutes) != 23 {
 		t.Fatalf("AD §6.2 define 23 rutas, la tabla tiene %d", len(contractRoutes))
 	}
 	router := newTestRouter()
 	for _, rt := range contractRoutes {
+		if isPublic(rt.path) {
+			continue
+		}
 		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
+			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{}"))
+			req.Header.Set("Authorization", "Bearer ok")
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, httptest.NewRequest(rt.method, rt.path, strings.NewReader("{}")))
+			router.ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotImplemented {
 				t.Fatalf("código %d, se esperaba 501", rec.Code)
-			}
-			if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-				t.Fatalf("content-type %q", ct)
 			}
 			var body map[string]string
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -80,6 +99,32 @@ func TestEveryContractRouteRespondsNotImplemented(t *testing.T) {
 				t.Fatalf("cuerpo de error inesperado: %v", body)
 			}
 		})
+	}
+}
+
+// Sin token (o con token inválido) toda ruta protegida responde 401 TOKEN_INVALIDO; las de autenticación son públicas.
+func TestProtectedRoutesRequireToken(t *testing.T) {
+	router := newTestRouter()
+	for _, rt := range contractRoutes {
+		for _, auth := range []string{"", "Bearer basura", "Basic ok"} {
+			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{}"))
+			if auth != "" {
+				req.Header.Set("Authorization", auth)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if isPublic(rt.path) {
+				if rec.Code == http.StatusUnauthorized && strings.Contains(rec.Body.String(), "TOKEN_") {
+					t.Fatalf("%s %s debe ser pública", rt.method, rt.path)
+				}
+				continue
+			}
+			var body map[string]string
+			_ = json.Unmarshal(rec.Body.Bytes(), &body)
+			if rec.Code != http.StatusUnauthorized || body["codigo"] != "TOKEN_INVALIDO" {
+				t.Fatalf("%s %s con %q: %d %v, se esperaba 401 TOKEN_INVALIDO", rt.method, rt.path, auth, rec.Code, body)
+			}
+		}
 	}
 }
 

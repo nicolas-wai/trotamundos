@@ -4,23 +4,38 @@ package application
 
 import (
 	"context"
+	"errors"
 
 	"github.com/nicolas-wai/trotamundos/src/replica/authentication/domain"
+)
+
+// Errores de la capa de aplicación de Autenticación.
+var (
+	ErrEmailTaken         = errors.New("el email ya está registrado")
+	ErrTravelerNotFound   = errors.New("viajero no encontrado")
+	ErrRefreshNotFound    = errors.New("refresh token no encontrado")
+	ErrInvalidCredentials = errors.New("credenciales inválidas")
+	ErrValidation         = errors.New("datos inválidos")
 )
 
 // TravelerRepository es el puerto de persistencia del agregado Cuenta del viajero.
 // El adapter lo implementa sobre PriorityQueuePort [ADR-09]. El email único se resuelve vía directorio ◇ [ADR-11].
 type TravelerRepository interface {
+	// Create reserva el email en el directorio (ErrEmailTaken si existe) y crea el viajero en su shard.
 	Create(ctx context.Context, traveler domain.Traveler) error
+	// FindByEmail devuelve ErrTravelerNotFound si no existe.
 	FindByEmail(ctx context.Context, email string) (domain.Traveler, error)
+	// FindByID devuelve ErrTravelerNotFound si no existe.
 	FindByID(ctx context.Context, travelerID string) (domain.Traveler, error)
 }
 
 // RefreshTokenRepository persiste los refresh tokens revocables. [ADR-16]
+// Recibe travelerID porque es la clave de partición [ADR-11].
 type RefreshTokenRepository interface {
 	Save(ctx context.Context, token domain.RefreshToken) error
-	FindByID(ctx context.Context, tokenID string) (domain.RefreshToken, error)
-	Revoke(ctx context.Context, tokenID string) error
+	// FindByID devuelve ErrRefreshNotFound si no existe.
+	FindByID(ctx context.Context, travelerID, tokenID string) (domain.RefreshToken, error)
+	Revoke(ctx context.Context, travelerID, tokenID string) error
 }
 
 // PreferencesRepository persiste las preferencias de recomendación del viajero. [ADR-25]
@@ -29,7 +44,7 @@ type PreferencesRepository interface {
 	Save(ctx context.Context, preferences domain.TravelerPreferences) error
 }
 
-// PasswordHasher es el puerto de cifrado de contraseñas (adapter bcrypt en Fase 2). [ADR-14]
+// PasswordHasher es el puerto de cifrado de contraseñas (adapter bcrypt). [ADR-14]
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) error

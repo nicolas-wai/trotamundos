@@ -2,17 +2,48 @@ package datanode
 
 import (
 	"context"
+	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
+	"github.com/nicolas-wai/trotamundos/src/contracts/events"
+	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
 // HeartbeatEmitter [ADR-22] Emisor de heartbeat del nodo de datos hacia el monitor de BD (E3).
+// El rol se consulta en cada pulso: tras un intercambio de responsabilidades el pulso refleja el nuevo rol.
 type HeartbeatEmitter struct {
-	nodeID string
+	nodeID   string
+	port     ports.HeartbeatPort
+	interval time.Duration
+	role     func() Role
+	seq      int64
 }
 
 // NewHeartbeatEmitter crea el emisor para un nodo.
-func NewHeartbeatEmitter(nodeID string) *HeartbeatEmitter { return &HeartbeatEmitter{nodeID: nodeID} }
+func NewHeartbeatEmitter(nodeID string, port ports.HeartbeatPort, interval time.Duration, role func() Role) *HeartbeatEmitter {
+	return &HeartbeatEmitter{nodeID: nodeID, port: port, interval: interval, role: role}
+}
 
-// Run emite pulsos periódicos hasta que el contexto termina.
-func (e *HeartbeatEmitter) Run(ctx context.Context) error { return apierror.ErrNotImplemented }
+// Run emite un pulso inmediato y luego uno por intervalo hasta que el contexto termina.
+func (e *HeartbeatEmitter) Run(ctx context.Context) error {
+	if e.port == nil || e.interval <= 0 {
+		return nil
+	}
+	e.beat(ctx)
+	t := time.NewTicker(e.interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			e.beat(ctx)
+		}
+	}
+}
+
+func (e *HeartbeatEmitter) beat(ctx context.Context) {
+	e.seq++
+	_ = e.port.Emit(ctx, events.Heartbeat{
+		NodoID: e.nodeID, TipoNodo: "DATOS", Rol: string(e.role()), Secuencia: e.seq, EmitidoEn: time.Now().UTC(),
+	})
+}

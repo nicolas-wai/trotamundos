@@ -25,6 +25,7 @@ type RegionConfig struct {
 	HeartbeatInterval      time.Duration // Pulso de heartbeat, 10 s [ADR-22]
 	HeartbeatMissThreshold int           // Pulsos perdidos para considerar caído un nodo, 3 [ADR-22]
 	AccessTokenTTL         time.Duration // Vida del access token, 900 s [ADR-16]
+	RefreshTokenTTL        time.Duration // Vida del refresh token, 7 días [ADR-16]
 	JWTSecret              string        // [Prototipo] secreto HS256 de desarrollo
 }
 
@@ -41,6 +42,7 @@ func Default() RegionConfig {
 		HeartbeatInterval:      10 * time.Second,
 		HeartbeatMissThreshold: 3,
 		AccessTokenTTL:         900 * time.Second,
+		RefreshTokenTTL:        7 * 24 * time.Hour,
 		JWTSecret:              "trotamundos-dev-secret",
 	}
 }
@@ -102,6 +104,7 @@ func LoadFrom(getenv func(string) string) (RegionConfig, error) {
 	dur("TROTAMUNDOS_HEARTBEAT_INTERVAL", &c.HeartbeatInterval)
 	num("TROTAMUNDOS_HEARTBEAT_MISS_THRESHOLD", &c.HeartbeatMissThreshold)
 	dur("TROTAMUNDOS_ACCESS_TOKEN_TTL", &c.AccessTokenTTL)
+	dur("TROTAMUNDOS_REFRESH_TOKEN_TTL", &c.RefreshTokenTTL)
 	str("TROTAMUNDOS_JWT_SECRET", &c.JWTSecret)
 
 	if firstErr != nil {
@@ -121,8 +124,8 @@ func (c RegionConfig) Validate() error {
 		return fmt.Errorf("se requiere al menos un shard")
 	case c.HeartbeatInterval <= 0 || c.HeartbeatMissThreshold < 1:
 		return fmt.Errorf("parámetros de heartbeat inválidos")
-	case c.AccessTokenTTL <= 0:
-		return fmt.Errorf("el TTL del access token debe ser positivo")
+	case c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0:
+		return fmt.Errorf("los TTL de los tokens deben ser positivos")
 	}
 	return nil
 }

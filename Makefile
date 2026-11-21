@@ -16,4 +16,5 @@ vet:
 # Borra los archivos SQLite locales y los binarios
 clean:
 	rm -f data/*.db
+	rm -rf data/*/
 	rm -rf bin

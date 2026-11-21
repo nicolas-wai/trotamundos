@@ -2,19 +2,50 @@ package datanode
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
+	"sync"
+	"time"
 
-	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
+	"github.com/nicolas-wai/trotamundos/src/datanode/primary"
 )
 
+// SyncTarget es el nodo destino de la sincronización (el nodo de datos pasivo). [ADR-21]
+type SyncTarget interface {
+	ID() string
+	InstallSnapshot(ctx context.Context, partition, snapshotPath string) error
+}
+
 // SyncEmitter [ADR-21] Emisor de sincronización periódica de estado hacia el nodo pasivo (E5).
-// En el prototipo usará VACUUM INTO sobre los archivos SQLite (Fase 2).
-type SyncEmitter struct{}
+// [Prototipo] Usa VACUUM INTO sobre los archivos SQLite de la primaria.
+type SyncEmitter struct {
+	mu         sync.Mutex // serializa sincronizaciones: comparten los archivos temporales de snapshot
+	nodeID     string
+	primary    *primary.PrimaryStore
+	partitions []string
+	tmpDir     string
+}
 
-// NewSyncEmitter crea el emisor.
-func NewSyncEmitter() *SyncEmitter { return &SyncEmitter{} }
+// NewSyncEmitter crea el emisor sobre la primaria del nodo.
+func NewSyncEmitter(nodeID string, p *primary.PrimaryStore, partitions []string, tmpDir string) *SyncEmitter {
+	return &SyncEmitter{nodeID: nodeID, primary: p, partitions: partitions, tmpDir: tmpDir}
+}
 
-// SyncTo sincroniza el estado hacia el destino y devuelve E5.
-func (e *SyncEmitter) SyncTo(ctx context.Context, destination string) (events.StateSync, error) {
-	return events.StateSync{}, apierror.ErrNotImplemented
+// SyncTo sincroniza todas las particiones hacia el destino y devuelve E5.
+func (e *SyncEmitter) SyncTo(ctx context.Context, target SyncTarget) (events.StateSync, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, part := range e.partitions {
+		tmp := filepath.Join(e.tmpDir, fmt.Sprintf("sync-%s-%s.tmp", e.nodeID, part))
+		if err := e.primary.Snapshot(ctx, part, tmp); err != nil {
+			return events.StateSync{}, fmt.Errorf("snapshot de %s: %w", part, err)
+		}
+		if err := target.InstallSnapshot(ctx, part, tmp); err != nil {
+			return events.StateSync{}, fmt.Errorf("instalando %s en %s: %w", part, target.ID(), err)
+		}
+	}
+	return events.StateSync{
+		Origen: e.nodeID, Destino: target.ID(), VersionEstado: e.primary.Version(), EmitidoEn: time.Now().UTC(),
+	}, nil
 }

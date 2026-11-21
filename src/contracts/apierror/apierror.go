@@ -42,3 +42,10 @@ func WriteError(w http.ResponseWriter, status int, codigo, mensaje string) {
 func WriteNotImplemented(w http.ResponseWriter) {
 	WriteError(w, http.StatusNotImplemented, NoImplementado, "Funcionalidad no implementada en esta fase del prototipo")
 }
+
+// WriteJSON escribe una respuesta JSON con el código HTTP indicado.
+func WriteJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}

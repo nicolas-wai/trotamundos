@@ -2,14 +2,19 @@
 package tokenvalidator
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
+type ctxKey struct{}
+
 // Validator [ADR-16] Valida firma y vigencia del access token localmente, sin estado compartido,
-// e inyecta idViajero en el contexto. Fase 1: aún no se engancha a las rutas.
+// e inyecta idViajero en el contexto (clave de partición [ADR-11]: siempre sale del token, nunca del body).
 type Validator struct {
 	tokens ports.TokenServicePort
 }
@@ -19,12 +24,31 @@ func NewValidator(tokens ports.TokenServicePort) *Validator { return &Validator{
 
 // Authenticate extrae y valida el Bearer token de la request.
 func (v *Validator) Authenticate(r *http.Request) (ports.Claims, error) {
-	return ports.Claims{}, apierror.ErrNotImplemented
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
+		return ports.Claims{}, ports.ErrTokenInvalid
+	}
+	return v.tokens.Validate(strings.TrimSpace(token))
 }
 
 // Middleware protege un handler exigiendo token válido (401 TOKEN_EXPIRADO / TOKEN_INVALIDO).
 func (v *Validator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apierror.WriteNotImplemented(w)
+		claims, err := v.Authenticate(r)
+		switch {
+		case errors.Is(err, ports.ErrTokenExpired):
+			apierror.WriteError(w, http.StatusUnauthorized, apierror.TokenExpirado, "El access token expiró")
+			return
+		case err != nil:
+			apierror.WriteError(w, http.StatusUnauthorized, apierror.TokenInvalido, "Token inválido o ausente")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, claims.TravelerID)))
 	})
+}
+
+// TravelerIDFrom devuelve el idViajero que el middleware inyectó en el contexto ("" si no hay).
+func TravelerIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(ctxKey{}).(string)
+	return id
 }

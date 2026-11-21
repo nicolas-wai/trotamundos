@@ -82,6 +82,7 @@ src/
 │       ├── collector/               # Recolector concurrente
 │       ├── engine/                  # Motor de filtrado basado en contenido
 │       └── hitl/                    # Retroalimentación HITL (Analyzer + Updater)
+├── region/                          # Ensambla una región completa (usada por main y por los tests de integración)
 ├── messagequeue/                    # [Contenedor] Cola de mensajes P2P
 ├── priorityqueue/                   # [Contenedor] Cola de prioridades y Health Monitor BD (AD §4.5)
 │   ├── admission.go  read_queue.go  write_queue.go
@@ -157,22 +158,22 @@ src/
 
 **Tareas:**
 
-- [ ] `datanode/schema`: DDL SQL plano por shard (`travelers`, `refresh_tokens`, `preferences`, `linked_email_accounts`, `trips`, `arrangements`, `shared_itineraries`, `access_permissions`, `access_requests`, `recommendations`, `recommendation_feedback`) y de la partición `directory`. Todas las tablas particionadas llevan `id_viajero`.
-- [ ] `datanode/operations`: catálogo de operaciones nombradas (`recurso` de E8 → SQL + tipo LECTURA/ESCRITURA). Solo SQL plano vía `database/sql`.
-- [ ] `PartitionRouter`: `hash(idViajero) mod N` y ruta especial a `directory` ◇ [ADR11].
-- [ ] `InMemoryCacheAdapter`: lectura cache-first, miss → réplica de lectura, invalidación por clave al escribir [ADR10].
-- [ ] Primaria + réplica de lectura: la escritura va a `primary-shard-N.db`, emite E6 `DataWritten` que replica a `replica-shard-N.db` e invalida la caché [ADR10].
-- [ ] `PriorityQueueNode`: admisión, cola de lecturas (alta) y escrituras (baja), FIFO por tipo, despacho por un worker gorutina; devuelve resultado por canal (`Futuro<Resultado>`) [ADR09]. Documentar el riesgo de starvation en comentario.
-- [ ] `priorityqueueclient`: implementa `PriorityQueuePort`, construye E8 con `idViajero` tomado del token (nunca del body) [ADR09, ADR11].
-- [ ] Nodo pasivo: segundo `DataNode`; `SyncEmitter` periódico con `VACUUM INTO` y E5 [ADR21].
-- [ ] `DataHeartbeatMonitor` + `DataNodeSwitch`: tras 3 pulsos perdidos redirige al pasivo, emite E4 y el nodo promovido activa su heartbeat y sincronización [ADR22].
-- [ ] `heartbeat.Emitter` en cada réplica y `ReplicaHeartbeatMonitor` que retira/reincorpora réplicas del `LoadBalancer` [ADR22, ADR08].
-- [ ] `LoadBalancer` round-robin sobre réplicas vivas con comentario `// [Prototipo] HTTP local simulando HTTPS/TLS` [ADR08, ADR12].
-- [ ] `authentication/adapters`: `BcryptPasswordHasher` (`x/crypto/bcrypt`) y `JWTTokenServiceAdapter` (HS256, access 900 s, refresh persistido y revocable) que implementan puertos propios [ADR14, ADR16].
-- [ ] `authentication/application`: `Register`, `Login`, `Refresh`, `Logout`, con email único (vía `directory`).
-- [ ] `tokenvalidator`: middleware que valida firma/vigencia localmente, responde `401 TOKEN_EXPIRADO` / token inválido e inyecta `idViajero` en el contexto [ADR16].
-- [ ] Handlers reales de `POST /registro`, `POST /login`, `POST /token/refresh`, `POST /logout` con payloads y códigos exactos de §6.2.
-- [ ] Composición en `main.go`: primario + pasivo + nodo de cola + 2 réplicas + LB. Archivos `.db` en `./data` (volumen de docker-compose).
+- [x] `datanode/schema`: DDL SQL plano por shard (`travelers`, `refresh_tokens`, `preferences`, `linked_email_accounts`, `trips`, `arrangements`, `shared_itineraries`, `access_permissions`, `access_requests`, `recommendations`, `recommendation_feedback`) y de la partición `directory`. Todas las tablas particionadas llevan `id_viajero`.
+- [x] `datanode/operations`: catálogo de operaciones nombradas (`recurso` de E8 → SQL + tipo LECTURA/ESCRITURA). Solo SQL plano vía `database/sql`.
+- [x] `PartitionRouter`: `hash(idViajero) mod N` y ruta especial a `directory` ◇ [ADR11].
+- [x] `InMemoryCacheAdapter`: lectura cache-first, miss → réplica de lectura, invalidación por clave al escribir [ADR10].
+- [x] Primaria + réplica de lectura: la escritura va a `primary-shard-N.db`, emite E6 `DataWritten` que replica a `replica-shard-N.db` e invalida la caché [ADR10].
+- [x] `PriorityQueueNode`: admisión, cola de lecturas (alta) y escrituras (baja), FIFO por tipo, despacho por un worker gorutina; devuelve resultado por canal (`Futuro<Resultado>`) [ADR09]. Documentar el riesgo de starvation en comentario.
+- [x] `priorityqueueclient`: implementa `PriorityQueuePort`, construye E8 con `idViajero` tomado del token (nunca del body) [ADR09, ADR11].
+- [x] Nodo pasivo: segundo `DataNode`; `SyncEmitter` periódico con `VACUUM INTO` y E5 [ADR21].
+- [x] `DataHeartbeatMonitor` + `DataNodeSwitch`: tras 3 pulsos perdidos redirige al pasivo, emite E4 y el nodo promovido activa su heartbeat y sincronización [ADR22].
+- [x] `heartbeat.Emitter` en cada réplica y `ReplicaHeartbeatMonitor` que retira/reincorpora réplicas del `LoadBalancer` [ADR22, ADR08].
+- [x] `LoadBalancer` round-robin sobre réplicas vivas con comentario `// [Prototipo] HTTP local simulando HTTPS/TLS` [ADR08, ADR12].
+- [x] `authentication/adapters`: `BcryptPasswordHasher` (`x/crypto/bcrypt`) y `JWTTokenServiceAdapter` (HS256, access 900 s, refresh persistido y revocable) que implementan puertos propios [ADR14, ADR16].
+- [x] `authentication/application`: `Register`, `Login`, `Refresh`, `Logout`, con email único (vía `directory`).
+- [x] `tokenvalidator`: middleware que valida firma/vigencia localmente, responde `401 TOKEN_EXPIRADO` / token inválido e inyecta `idViajero` en el contexto [ADR16].
+- [x] Handlers reales de `POST /registro`, `POST /login`, `POST /token/refresh`, `POST /logout` con payloads y códigos exactos de §6.2.
+- [x] Composición en `main.go`: primario + pasivo + nodo de cola + 2 réplicas + LB. Archivos `.db` en `./data/<nodo>/` (volumen de docker-compose). La composición vive en `src/region` (reutilizada por los tests de integración) y `main.go` solo levanta los `http.Server`.
 
 **Criterio de verificación** (`go test ./...`):
 

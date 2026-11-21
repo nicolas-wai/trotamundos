@@ -1,5 +1,5 @@
 // Comando trotamundos: raíz de composición que arma una región completa (AD §3.1). [ADR-21]
-// Fase 1: LoadBalancer → N réplicas con handlers en esqueleto (501).
+// Fase 2: LoadBalancer → N réplicas → cola de prioridades → nodo de datos primario/pasivo (src/region).
 package main
 
 import (
@@ -15,8 +15,7 @@ import (
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
-	"github.com/nicolas-wai/trotamundos/src/loadbalancer"
-	"github.com/nicolas-wai/trotamundos/src/replica"
+	"github.com/nicolas-wai/trotamundos/src/region"
 )
 
 func main() {
@@ -34,15 +33,20 @@ func run(cfg config.RegionConfig) error {
 	defer stop()
 
 	// [Prototipo] HTTP local simulando HTTPS/TLS.
+	reg, err := region.New(cfg, region.Options{})
+	if err != nil {
+		return err
+	}
+	defer reg.Close()
+
 	var servers []*http.Server
 	var targets []*url.URL
 	for i, port := range cfg.ReplicaPorts() {
-		r := replica.New(fmt.Sprintf("%s-replica-%d", cfg.RegionID, i+1), cfg)
-		servers = append(servers, &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: r.Handler()})
+		servers = append(servers, &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: reg.Replicas[i].Handler()})
 		targets = append(targets, &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
 	}
-	lb := loadbalancer.NewLoadBalancer(targets)
-	servers = append(servers, &http.Server{Addr: fmt.Sprintf(":%d", cfg.LoadBalancerPort), Handler: lb})
+	servers = append(servers, &http.Server{Addr: fmt.Sprintf(":%d", cfg.LoadBalancerPort), Handler: reg.NewLoadBalancer(targets)})
+	reg.Start(ctx)
 
 	errCh := make(chan error, len(servers))
 	for _, s := range servers {

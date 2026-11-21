@@ -1,6 +1,16 @@
 package ports
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// Errores del acceso a datos.
+var (
+	ErrDataConflict        = errors.New("conflicto de unicidad en datos")
+	ErrDataNodeUnavailable = errors.New("nodo de datos no disponible")
+	ErrUnknownResource     = errors.New("recurso de datos desconocido")
+)
 
 // DataQuery es una lectura nombrada contra el catálogo de operaciones del nodo de datos.
 type DataQuery struct {
@@ -26,4 +36,12 @@ type DataResult struct {
 type DataPort interface {
 	Read(ctx context.Context, travelerID string, query DataQuery) (DataResult, error)
 	Write(ctx context.Context, travelerID string, command DataCommand) (DataResult, error)
+}
+
+// DataGateway [ADR-09] Conveniencia sobre PriorityQueuePort: arma la operación E8 (lectura/escritura),
+// la encola y espera su resultado. idViajero lo entrega la capa de aplicación (que lo toma del token) [ADR-11].
+// Para operaciones de la partición directory travelerID va vacío.
+type DataGateway interface {
+	Read(ctx context.Context, travelerID, resource string, params map[string]any) (DataResult, error)
+	Write(ctx context.Context, travelerID, resource string, params map[string]any) (DataResult, error)
 }
