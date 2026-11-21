@@ -52,7 +52,7 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 | Escalabilidad y persistencia | Módulos y C&C | [iteracion-3, paso 6](docs/02-add/iteracion-3.md#paso-6---documentación) |
 | Seguridad | Módulos y 2 secuencias | [iteracion-4, paso 6](docs/02-add/iteracion-4.md#paso-6---documentación) |
 | Presentación | Módulos, C&C y secuencia | [iteracion-5, paso 6](docs/02-add/iteracion-5.md#paso-6---documentación) |
-| Deployment | Asignación | [deployment.md](docs/03-vistas/deployment.md) |
+
 
 ### Pendientes
 
