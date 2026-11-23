@@ -17,7 +17,8 @@ var (
 
 // LinkedEmailAccountPort [ADR-15] Persistencia de las cuentas de correo vinculadas por OAuth (tokens ya cifrados).
 // Puerto compartido entre Autenticación (que implementa el adapter sobre la cola de prioridades) y el Gestor OAuth
-// de Integraciones externas (que lo consume): así ningún módulo importa la capa application del otro [ADR-02].
+// de Integraciones externas (que lo consume): así ninguno de estos dos módulos importa la capa application del
+// otro [ADR-02].
 type LinkedEmailAccountPort interface {
 	Save(ctx context.Context, account auth.LinkedEmailAccount) error
 	// FindByID devuelve ErrLinkedAccountNotFound si no existe o no es del viajero.
