@@ -30,7 +30,7 @@ Todo el sistema se sirve **solo por HTTPS** [ADR-12]: no se abre ningún puerto 
 ## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
 
-En base a esto, decidimos hacer en primera instancia las iteraciones de ADD a mano (`/docs/02-add/iteracion-n.md`). Posteriormente, se simula la iteración por medio del LLM siguiendo las recomendaciones y prompts del paper "Better Together" (`/docs/02-add/iteracion-n-llm.md`). Finalmente, estas se contrastan y ponderan, dando como resultado un conjunto de decisiones. Las mismas se documentan en formato MADR en la carpeta `/docs/adr/`. Cabe aclarar que para tener una base más firme, la iteración 1 es puramente nuestra. A partir de la iteración 2 se implementa el esquema antes descrito.
+En base a esto, decidimos hacer en primera instancia las iteraciones de ADD a mano (`/docs/02-add/iteracion-n.md`). Posteriormente, se simula la iteración por medio del LLM siguiendo las recomendaciones y prompts del paper "Better Together" (`/docs/anexo-llm/iteracion-n-llm.md`). Finalmente, estas se contrastan y ponderan, dando como resultado un conjunto de decisiones. Las mismas se documentan en formato MADR en la carpeta `/docs/adr/`. Cabe aclarar que para tener una base más firme, la iteración 1 es puramente nuestra. A partir de la iteración 2 se implementa el esquema antes descrito.
 
 ## Escenarios de atributos de calidad
 - Se aprovechó la construccion previa de la [skill](https://github.com/Dalviux9th/wonderful-skill) para escenarios de qa para orientar el diseño de escenarios
@@ -55,6 +55,8 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 | 3 | Escalabilidad y persistencia | QA05, QA06, QA07 | [08](docs/adr/08-LoadBalancer.md), [09](docs/adr/09-ColaPrioridad.md), [10](docs/adr/10-DBRelacionalCache.md), [11](docs/adr/11-ShardingDBporViajero.md) | [iteracion-3](docs/02-add/iteracion-3.md) | [iteracion-3-llm](docs/anexo-llm/iteracion-3-llm.md) |
 | 4 | Seguridad | QA08, QA09, QA15 | [12](docs/adr/12-EncriptarDatos.md), [13](docs/adr/13-InformarUsuario.md), [14](docs/adr/14-AutenticarUsuario.md), [15](docs/adr/15-EmailsConOAuth.md), [16](docs/adr/16-TokensVidaCorta.md) | [iteracion-4](docs/02-add/iteracion-4.md) | [iteracion-4-llm](docs/anexo-llm/iteracion-4-llm.md) |
 | 5 | Presentación | QA02, QA03, QA11 | [17](docs/adr/17-PayloadReducido.md), [18](docs/adr/18-ReflejoAutomatico.md), [19](docs/adr/19-PersonalizacionLocalStorage.md), [20](docs/adr/20-SSR.md) | [iteracion-5](docs/02-add/iteracion-5.md) | [iteracion-5-llm](docs/anexo-llm/iteracion-5-llm.md) |
+| 6 | Deployment y disponibilidad | QA04, QA13 | [21](docs/adr/21-Deployment.md), [22](docs/adr/22-Heartbeat.md) | [iteracion-6](docs/02-add/iteracion-6.md) | [iteracion-6-llm](docs/anexo-llm/iteracion-6-llm.md) |
+| 7 | Recomendaciones | US08, QA17, QA18 | [23](docs/adr/23-AsincronismoRecomendaciones.md), [24](docs/adr/24-ConcurrenciaConsultaHistorial.md), [25](docs/adr/25-RecomendacionBasadaEnContenido.md) | [iteracion-7](docs/02-add/iteracion-7.md) | [iteracion-7-llm](docs/anexo-llm/iteracion-7-llm.md) |
 ### Vistas arquitectónicas
 
 | Vista | Tipo | Ubicación |
@@ -65,6 +67,8 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 | Escalabilidad y persistencia | Módulos y C&C | [iteracion-3, paso 6](docs/02-add/iteracion-3.md#paso-6---documentación) |
 | Seguridad | Módulos y 2 secuencias | [iteracion-4, paso 6](docs/02-add/iteracion-4.md#paso-6---documentación) |
 | Presentación | Módulos, C&C y secuencia | [iteracion-5, paso 6](docs/02-add/iteracion-5.md#paso-6---documentación) |
+| Despliegue y healthchecks | Despliegue | [iteracion-6, paso 6](docs/02-add/iteracion-6.md#paso-6---documentación) |
+| Recomendaciones | Módulos y secuencia | [iteracion-7, paso 6](docs/02-add/iteracion-7.md#paso-6---documentación) |
 
 
 ### Pendientes
@@ -72,23 +76,11 @@ Apuntamos a las decisiones estructurales que más adelante son dificiles/costosa
 - US03 Filtros y whitelists, es una capa sobre las reservas/dashboard y una configuración sobre la seguridad
 - US05 Resolución de problemas, reutiliza los puertos y adaptadores de agencias
 - US06 Analítica, baja prioridad (ver riesgos identificados)
-- US08 Recomendaciones, 2° Entrega
 - QA12 Capacidades nativas, baja prioridad, depende de como se resuelva finalmente el cliente móvil
-- QA12 Proveedores de redes sociales, baja prioridad, puede ser un adapter mas depende de lo que se requiera hacer con ellas
+- QA16 Proveedores de redes sociales, baja prioridad, puede ser un adapter mas depende de lo que se requiera hacer con ellas
 
 ### Parcialmente abordado
 
-- QA01 - Falta definir que logre la medida de respuesta de 5 min el 95% de las veces, requiere pruebas de latencia sobre el prototipo
-- QA04 - Falta un sistema claro de deteccion y recuperación, se pueden probar health checks sobre el prototipo
 - QA03 - Adaptar el diseño web a un especifico cliente móvil
 - QA10 - Explicitar como se agrega, el diseño ya apoya la integración sencilla
 - QA13 - Explicitar como configura un pais, el diseño ya apoya la integración y escalabilidad sencilla
-
-### Riesgos identificados
-Los riesgos que quedaron sin definir hay que explicitarlos. Se deben revisar frente al prototipo funcionando.
-
-- Las consultas cruzadas entre viajeros (itinerarios compartidos, analítica) frente al particionado por idViajero ([ADR11](docs/adr/11-ShardingDBporViajero.md))
-- Starving de escritura por la cola de prioridad ([ADR09](docs/adr/09-ColaPrioridad.md))
-- Rollback cuando un cliente ya vio un cambio que no persistió ([ADR18](docs/adr/18-ReflejoAutomatico.md))
-- Sin revocación inmediata del access token ([ADR16](docs/adr/16-TokensVidaCorta.md))
-- Puntos únicos de falla: balanceador, cola, primaria
