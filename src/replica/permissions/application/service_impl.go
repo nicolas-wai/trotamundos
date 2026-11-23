@@ -109,6 +109,35 @@ func (s *Service) GetItinerary(ctx context.Context, viewerID, itineraryID string
 	return it, nil
 }
 
+// ListOwnedItineraries devuelve los itinerarios del dueño con sus reservas, los accesos vigentes y las solicitudes
+// pendientes (las decididas no se muestran). Si el catálogo de reservas falla, la lista falla completa.
+func (s *Service) ListOwnedItineraries(ctx context.Context, ownerID string) ([]domain.SharedItinerary, error) {
+	list, err := s.itineraries.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		it := &list[i]
+		if it.Arrangements, err = s.arrangements.Summaries(ctx, ownerID, it.ArrangementIDs); err != nil {
+			return nil, err
+		}
+		active := []domain.AccessPermission{}
+		for _, p := range it.Permissions {
+			if p.Active {
+				active = append(active, p)
+			}
+		}
+		pending := []domain.AccessRequest{}
+		for _, q := range it.Requests {
+			if q.Status == domain.RequestPending {
+				pending = append(pending, q)
+			}
+		}
+		it.Permissions, it.Requests = active, pending
+	}
+	return list, nil
+}
+
 // CanView indica si el viajero puede ver el itinerario (dueño o autorizado vigente).
 func (s *Service) CanView(ctx context.Context, travelerID, itineraryID string) (bool, error) {
 	it, err := s.itineraries.FindByID(ctx, itineraryID)

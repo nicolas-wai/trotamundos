@@ -14,6 +14,19 @@ Por ultimo, nos toca aplicar el diseño generado en la round a un prototipo real
 | [Método ADD](docs/02-add/ADD.md) | Descripción de los pasos del método usados en cada iteración |
 | [Enunciado resumido](docs/00-enunciados-resumenes/resumen-enunciado.md) | Resumen del enunciado de la cátedra |
 
+## Cómo correr el prototipo
+
+```
+make run          # https://localhost:8080 (balanceador); las réplicas escuchan en https://127.0.0.1:8081 y :8082
+make test         # pruebas unitarias y de integración
+make test-e2e     # pruebas de navegador (requiere `make e2e-install` una vez)
+make test-load    # prueba de carga de 500 req/s (lenta; deja el resumen en bin/load-summary.txt)
+```
+
+Si hay archivos `.db` de una versión anterior, borrar `data/` antes de correr (`make clean`): el esquema no se migra.
+
+Todo el sistema se sirve **solo por HTTPS** [ADR-12]: no se abre ningún puerto http. Al arrancar se genera (o se reutiliza de `data/tls/`) un certificado autofirmado para `localhost` y `127.0.0.1`, por lo que **el navegador avisa la primera vez** ("la conexión no es privada"); hay que aceptar el certificado para continuar. Con `curl` usar `curl --cacert data/tls/cert.pem https://localhost:8080/`. Con Docker: `docker compose up` y abrir `https://localhost:8080`.
+
 ## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
 

@@ -37,6 +37,19 @@ func NewMockOAuth2AuthAdapter() *MockOAuth2AuthAdapter {
 	return &MockOAuth2AuthAdapter{usedCodes: map[string]bool{}, now: time.Now}
 }
 
+// WithClock inyecta el reloj con el que vencen los tokens (pruebas); nil deja time.Now.
+func (m *MockOAuth2AuthAdapter) WithClock(now func() time.Time) *MockOAuth2AuthAdapter {
+	if now != nil {
+		m.mu.Lock()
+		m.now = now
+		m.mu.Unlock()
+	}
+	return m
+}
+
+// TokenLifetime es la vigencia de los access tokens simulados.
+const TokenLifetime = time.Hour
+
 // ExchangeCode intercambia el código de autorización por tokens. Un código que no empieza con AuthCodePrefix,
 // vacío o ya usado → ErrInvalidAuthorizationCode.
 func (m *MockOAuth2AuthAdapter) ExchangeCode(_ context.Context, provider, code, redirectURI string) (ports.OAuthTokens, error) {
@@ -53,7 +66,7 @@ func (m *MockOAuth2AuthAdapter) ExchangeCode(_ context.Context, provider, code, 
 	return ports.OAuthTokens{
 		AccessToken:  AccessTokenPrefix + provider + "-" + suffix,
 		RefreshToken: refreshPrefix + provider + "-" + suffix,
-		ExpiresAt:    m.now().Add(time.Hour).UTC(),
+		ExpiresAt:    m.now().Add(TokenLifetime).UTC(),
 	}, nil
 }
 
@@ -70,7 +83,7 @@ func (m *MockOAuth2AuthAdapter) Refresh(_ context.Context, accountID string) (po
 	return ports.OAuthTokens{
 		AccessToken:  fmt.Sprintf("%sr%d-%s", AccessTokenPrefix, m.refreshes, accountID),
 		RefreshToken: fmt.Sprintf("%sr%d-%s", refreshPrefix, m.refreshes, accountID),
-		ExpiresAt:    m.now().Add(time.Hour).UTC(),
+		ExpiresAt:    m.now().Add(TokenLifetime).UTC(),
 	}, nil
 }
 

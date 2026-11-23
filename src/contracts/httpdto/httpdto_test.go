@@ -49,7 +49,8 @@ func TestAuthDTOs(t *testing.T) {
 }
 
 func TestDashboardDTOs(t *testing.T) {
-	assertKeys(t, "DashboardResponse", DashboardResponse{}, "viajes", "avisosProveedores")
+	assertKeys(t, "DashboardResponse", DashboardResponse{}, "viajes", "avisosProveedores", "itinerarios")
+	assertKeys(t, "OwnedItinerary", OwnedItinerary{}, "idItinerario", "nombre", "linkPublico", "arreglos", "accesos", "solicitudes")
 	assertKeys(t, "TripSummary", TripSummary{}, "idViaje", "nombre", "destino", "fechaInicio", "fechaFin", "arreglos")
 	assertKeys(t, "ArrangementSummary", ArrangementSummary{}, "idArreglo", "tipo", "titulo", "fechaInicio", "estado", "origen")
 	assertKeys(t, "ProviderNotice", ProviderNotice{}, "proveedor", "mensaje")

@@ -134,6 +134,8 @@
         localizeTimes(els.app);
         global.VisualPreferences.applyOrder(els.app); // preferencias aplicadas antes de mostrar [ADR-19]
         // [ADR-23] Request independiente: no se espera ni bloquea las reservas ya visibles.
+        // [ADR-13] "Mis itinerarios": parte del mismo HTML del dashboard; su JS solo lo activa.
+        if (global.ItinerariesPanel) { global.ItinerariesPanel.init(els.app, { request: request, notify: showBanner, reload: loadDashboard }); }
         if (global.RecommendationsPanel) { global.RecommendationsPanel.init(els.app, { request: request, notify: showBanner }); }
       });
     }).catch(function () {

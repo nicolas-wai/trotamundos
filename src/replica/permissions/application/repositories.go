@@ -29,6 +29,8 @@ type SharedItineraryRepository interface {
 	// FindByID carga el agregado completo (itinerario, arreglos referenciados, permisos y solicitudes).
 	// Devuelve ErrItineraryNotFound si no existe.
 	FindByID(ctx context.Context, itineraryID string) (domain.SharedItinerary, error)
+	// ListByOwner devuelve los itinerarios del dueño con su agregado completo (arreglos, permisos, solicitudes).
+	ListByOwner(ctx context.Context, ownerID string) ([]domain.SharedItinerary, error)
 	// Create registra el itinerario en el directorio y lo guarda con sus arreglos iniciales.
 	Create(ctx context.Context, itinerary domain.SharedItinerary) error
 	// Delete elimina el itinerario con sus permisos y solicitudes.

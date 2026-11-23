@@ -58,3 +58,16 @@ li.recommendation .actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 li.recommendation .actions button { background: transparent; color: var(--accent); }
 li.recommendation .adjust-form { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
 li.recommendation .adjust-form label { margin: 0; }
+
+/* [ADR-13] Mis itinerarios: sección propia bajo las reservas. */
+.itineraries h2 { font-size: 1.15rem; }
+article.itinerary { border: 1px solid var(--border); border-radius: .5rem; padding: .5rem .9rem; margin-bottom: 1rem; background: var(--surface); }
+article.itinerary h3 { margin: 0; }
+article.itinerary h4 { margin: .75rem 0 .25rem; font-size: .95rem; }
+article.itinerary ul, .guest-view ul { list-style: none; margin: 0; padding: 0; }
+article.itinerary li { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; padding: .3rem 0; border-top: 1px solid var(--border); }
+article.itinerary li.empty { color: var(--muted); border-top: 0; }
+article.itinerary li.pending { opacity: .6; }
+article.itinerary li button, article.itinerary header button { padding: .15rem .6rem; }
+.itinerary-add select { display: inline-block; width: auto; }
+.itinerary-create, .itinerary-open { max-width: 28rem; }

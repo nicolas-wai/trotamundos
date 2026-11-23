@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
@@ -48,9 +49,10 @@ type Dependencies struct {
 	// ProviderCatalog es el catálogo de proveedores de las recomendaciones (obligatorio; lo inyecta la región). [ADR-25]
 	ProviderCatalog ports.ProviderCatalogPort
 	Providers       integrations.Clients // APIs externas de los adapters (stubs)
-	// RunIntegrations marca a la réplica que ejecuta el consumidor de la cola P2P y el planificador de sondeo.
-	// La cola P2P admite un único consumidor [ADR-04], por lo que la región designa una sola réplica.
-	RunIntegrations bool
+	// ReplicaIDs son los identificadores de todas las réplicas de la región, en orden de prioridad de liderazgo.
+	// Todas las réplicas arman el módulo de integraciones, pero solo la líder según el heartbeat ejecuta el
+	// consumidor de la cola P2P y el planificador de sondeo [ADR-04][ADR-21]. Vacío = la réplica no participa.
+	ReplicaIDs []string
 }
 
 // Replica ensambla los módulos de una réplica del monolito modular.
@@ -64,8 +66,10 @@ type Replica struct {
 	Recommender    *recommendations.Recommender
 	OAuthManager   *oauthmanager.OAuthManager
 	Heartbeat      *heartbeat.ReplicaHeartbeatEmitter
-	Consumer       *updateconsumer.UpdateConsumer // nil si la réplica no ejecuta Integraciones
-	Integrations   *integrations.Module           // nil si la réplica no ejecuta Integraciones
+	Consumer       *updateconsumer.UpdateConsumer // nil si la réplica no participa en Integraciones
+	Integrations   *integrations.Module           // nil si la réplica no participa en Integraciones
+	// Leader decide si esta réplica ejecuta hoy el consumidor y el planificador. [ADR-04][ADR-21]
+	Leader *integrations.IntegrationsLeaderElector
 }
 
 // New arma una réplica con todos sus módulos: Autenticación (Fase 2), Arreglos de viaje (Fase 3), Integraciones
@@ -97,7 +101,7 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) (*Replica, error
 	if err != nil {
 		return nil, err
 	}
-	oauth := oauthmanager.NewOAuthManager(deps.OAuth, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher)
+	oauth := oauthmanager.NewOAuthManager(deps.OAuth, authadapters.NewQueueLinkedEmailAccountRepository(queueClient), tokenCipher).WithClock(deps.Clock)
 
 	// Preferencias del perfil [ADR-25]: las usan el perfil (PUT /perfil/preferencias), el recolector y HITL.
 	preferences := authadapters.NewQueuePreferencesRepository(queueClient)
@@ -144,8 +148,9 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) (*Replica, error
 	var (
 		consumer *updateconsumer.UpdateConsumer
 		module   *integrations.Module
+		leader   *integrations.IntegrationsLeaderElector
 	)
-	if deps.RunIntegrations && deps.MessageQueue != nil {
+	if len(deps.ReplicaIDs) > 0 && deps.MessageQueue != nil {
 		// Integraciones externas [ADR-04..07]: sondeo → circuit breaker → adapters → broker → cola P2P →
 		// consumidor → Arreglos de viaje. Los avisos E2 del circuit breaker llegan por el bus de eventos.
 		module = integrations.NewModule(integrations.Config{
@@ -153,9 +158,12 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) (*Replica, error
 			Breaker: circuitbreaker.Config{MaxRetries: cfg.ProviderMaxRetries, Backoff: cfg.ProviderBackoff, Cooldown: cfg.ProviderCooldown},
 		}, deps.MessageQueue, deps.EventBus, queueClient, oauth, deps.Providers)
 		consumer = updateconsumer.NewUpdateConsumer(deps.MessageQueue, arrangements)
+		leader = integrations.NewIntegrationsLeaderElector(id, deps.ReplicaIDs, deps.Heartbeat, cfg.HeartbeatInterval)
 		if deps.EventBus != nil {
+			// Todas las réplicas escuchan E2, pero solo la líder lo registra (una sola vez por región): así los
+			// avisos siguen llegando al dashboard después de un relevo. [ADR-07]
 			deps.EventBus.Subscribe(events.TopicProviderDegraded, func(ctx context.Context, payload any) {
-				if d, ok := payload.(events.ProviderDegraded); ok {
+				if d, ok := payload.(events.ProviderDegraded); ok && leader.IsLeader() {
 					_ = arrangements.ReportProviderDegraded(ctx, d)
 				}
 			})
@@ -174,7 +182,28 @@ func New(id string, cfg config.RegionConfig, deps Dependencies) (*Replica, error
 		Heartbeat:      heartbeat.NewReplicaHeartbeatEmitter(id, deps.Heartbeat, cfg.HeartbeatInterval),
 		Consumer:       consumer,
 		Integrations:   module,
+		Leader:         leader,
 	}, nil
+}
+
+// RunIntegrations ejecuta el consumidor de la cola P2P y el planificador de sondeo mientras esta réplica sea la
+// líder; al dejar de serlo (o caer) cancela ambos. Bloquea hasta que ctx termina. [ADR-04][ADR-21]
+// ctx debe ser el contexto de la réplica (no el raíz de la región) para que su caída detenga el liderazgo.
+func (r *Replica) RunIntegrations(ctx context.Context, polling bool) {
+	if r.Leader == nil {
+		return
+	}
+	retry := r.Config.HeartbeatInterval
+	r.Leader.Run(ctx, func(lctx context.Context) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() { defer wg.Done(); integrations.RunWithRetry(lctx, retry, r.Consumer.Run) }() // único consumidor [ADR-04]
+		if polling {
+			wg.Add(1)
+			go func() { defer wg.Done(); _ = r.Integrations.Scheduler.Run(lctx) }() // sondeo cada <= 2 min [ADR-05]
+		}
+		wg.Wait()
+	})
 }
 
 // Handler devuelve el handler HTTP de la réplica.

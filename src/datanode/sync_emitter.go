@@ -9,13 +9,11 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
 	"github.com/nicolas-wai/trotamundos/src/datanode/primary"
+	"github.com/nicolas-wai/trotamundos/src/ports"
 )
 
 // SyncTarget es el nodo destino de la sincronización (el nodo de datos pasivo). [ADR-21]
-type SyncTarget interface {
-	ID() string
-	InstallSnapshot(ctx context.Context, partition, snapshotPath string) error
-}
+type SyncTarget = ports.SyncTarget
 
 // SyncEmitter [ADR-21] Emisor de sincronización periódica de estado hacia el nodo pasivo (E5).
 // [Prototipo] Usa VACUUM INTO sobre los archivos SQLite de la primaria.

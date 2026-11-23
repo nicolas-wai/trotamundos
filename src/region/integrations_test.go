@@ -12,6 +12,8 @@ import (
 
 	"github.com/nicolas-wai/trotamundos/src/config"
 	"github.com/nicolas-wai/trotamundos/src/contracts/events"
+	"github.com/nicolas-wai/trotamundos/src/contracts/resources"
+	"github.com/nicolas-wai/trotamundos/src/replica/integrations/domain"
 	"github.com/nicolas-wai/trotamundos/src/stubs"
 )
 
@@ -322,3 +324,60 @@ func TestConsumerAppliesE1FromTheP2PQueue(t *testing.T) {
 	})
 	eventually(t, time.Second, "ambos mensajes confirmados", func() bool { return e.reg.MessageQueue.Pending() == 0 })
 }
+
+// [ADR-15][ADR-07] El token vence, el sondeo lo renueva solo; si el proveedor rechaza la renovación la cuenta
+// queda para re-vincular, el planificador deja de sondearla y el circuit breaker no se abre.
+func TestExpiredEmailTokenIsRefreshedAndRejectedRefreshStopsPollingWithoutOpeningCircuit(t *testing.T) {
+	e := pollingEnv(t, nil)
+	_, token := e.signUp(t, "ana@example.com")
+	resp, body := e.do(t, "POST", "/correos", token, linkBody("gmail", "mock-code-ana"))
+	if resp.StatusCode != 201 {
+		t.Fatalf("vincular: %d %v", resp.StatusCode, body)
+	}
+	accountID := body["idCuenta"].(string)
+	providerID := domain.ProviderIDFor(domain.ProviderEmail, "gmail")
+	listed := func() bool {
+		res, err := e.reg.Switch.Dispatch(context.Background(), events.QueuedOperation{Tipo: events.OperationRead, Recurso: resources.DirectoryLinkedAccountList})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range res.Rows {
+			if row["id_cuenta"] == accountID {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1) El token vence: el siguiente sondeo renueva y sigue ingiriendo con el token nuevo.
+	e.clock.Advance(2 * stubs.TokenLifetime)
+	resp, body = e.do(t, "POST", "/login", "", creds("ana@example.com", "clave-segura-1")) // el JWT de la API también venció
+	token = body["accessToken"].(string)
+	eventually(t, 5*time.Second, "reservas del correo tras renovar el token", func() bool {
+		d := e.dashboardJSON(t, token)
+		for _, v := range d.Viajes {
+			for _, a := range v.Arreglos {
+				if a.Origen == "EMAIL" {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	if !listed() {
+		t.Fatal("la cuenta renovada debe seguir en el sondeo")
+	}
+
+	// 2) El proveedor revoca la cuenta y el token vuelve a vencer: la renovación se rechaza.
+	if err := e.reg.ExternalAPIs.OAuth.Revoke(context.Background(), accountID); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.Advance(2 * stubs.TokenLifetime)
+	eventually(t, 5*time.Second, "cuenta marcada para re-vincular y fuera del sondeo", func() bool { return !listed() })
+	time.Sleep(3 * pollingEnvInterval) // varios ciclos más: no debe abrirse el circuito del proveedor
+	if st := e.reg.Replicas[0].Integrations.Breaker.State(providerID); st == domain.CircuitOpen {
+		t.Fatal("una credencial rechazada no es una falla del proveedor: el circuito no debe abrirse")
+	}
+}
+
+const pollingEnvInterval = 200 * time.Millisecond

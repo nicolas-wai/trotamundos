@@ -14,6 +14,9 @@ type PermissionsService interface {
 
 	CreateItinerary(ctx context.Context, ownerID, name string, arrangementIDs []string) (domain.SharedItinerary, error)
 	DeleteItinerary(ctx context.Context, ownerID, itineraryID string) error
+	// ListOwnedItineraries devuelve los itinerarios del dueño para su pantalla "Mis itinerarios": con las reservas
+	// incluidas, los accesos vigentes y solo las solicitudes pendientes. [ADR-13]
+	ListOwnedItineraries(ctx context.Context, ownerID string) ([]domain.SharedItinerary, error)
 	GetItinerary(ctx context.Context, viewerID, itineraryID string) (domain.SharedItinerary, error)
 	AddArrangement(ctx context.Context, ownerID, itineraryID, arrangementID string) error
 	RemoveArrangement(ctx context.Context, ownerID, itineraryID, arrangementID string) error

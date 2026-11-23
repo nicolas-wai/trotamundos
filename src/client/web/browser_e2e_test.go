@@ -8,6 +8,7 @@ package web_test
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	playwright "github.com/mxschmitt/playwright-go"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
+	"github.com/nicolas-wai/trotamundos/src/loadbalancer"
 	"github.com/nicolas-wai/trotamundos/src/region"
 )
 
@@ -31,15 +33,26 @@ func startRegion(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// [ADR-12] Todo el sistema va por https con el certificado propio; el navegador de prueba lo acepta.
+	material, err := loadbalancer.NewSelfSignedTLS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	startTLS := func(h http.Handler) *httptest.Server {
+		s := httptest.NewUnstartedServer(h)
+		s.TLS = material.ServerConfig()
+		s.StartTLS()
+		return s
+	}
 	var urls []*url.URL
 	var servers []*httptest.Server
 	for _, rep := range reg.Replicas {
-		s := httptest.NewServer(rep.Handler())
+		s := startTLS(rep.Handler())
 		servers = append(servers, s)
 		u, _ := url.Parse(s.URL)
 		urls = append(urls, u)
 	}
-	lb := httptest.NewServer(reg.NewLoadBalancer(urls))
+	lb := startTLS(reg.NewLoadBalancer(urls, loadbalancer.WithBackendTLS(material)))
 	ctx, cancel := context.WithCancel(context.Background())
 	reg.Start(ctx)
 	t.Cleanup(func() {
@@ -64,7 +77,7 @@ func newPage(t *testing.T) playwright.Page {
 		t.Fatalf("chromium: %v (¿instalaste el navegador? ver `make e2e-install`)", err)
 	}
 	t.Cleanup(func() { _ = browser.Close(); _ = pw.Stop() })
-	page, err := browser.NewPage()
+	page, err := browser.NewPage(playwright.BrowserNewPageOptions{IgnoreHttpsErrors: playwright.Bool(true)}) // certificado autofirmado [ADR-12]
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,6 +49,7 @@ const (
 	DirectoryItineraryRemove   = "directory.itinerary.remove"
 	ItineraryCreate            = "itinerary.create"
 	ItineraryFind              = "itinerary.find"
+	ItineraryListByOwner       = "itinerary.list_by_owner" // Fase 7: "Mis itinerarios" del dashboard [ADR-13]
 	ItineraryDelete            = "itinerary.delete"
 	ItineraryArrangementAdd    = "itinerary.arrangement.add"
 	ItineraryArrangementRemove = "itinerary.arrangement.remove"

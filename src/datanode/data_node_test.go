@@ -3,6 +3,7 @@ package datanode
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,4 +206,120 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("condición no cumplida a tiempo")
+}
+
+// [ADR-10] La réplica falla a propósito: no queda caché vieja, la lectura ve el dato nuevo desde la primaria
+// y al recuperarse la réplica la pendiente se aplica.
+func TestFailedReplicationLeavesNoStaleCacheAndIsRetried(t *testing.T) {
+	var failing atomic.Bool
+	n, err := NewDataNode(Config{ID: "n", Role: RoleActive, Dir: t.TempDir(), Shards: 2,
+		ReplicationFault: func(operations.ReplicationRecord) error {
+			if failing.Load() {
+				return errors.New("réplica caída")
+			}
+			return nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.Close()
+	write(t, n, "v1", resources.LinkedAccountSave, map[string]any{"idCuenta": "c1", "idViajero": "v1", "proveedor": "gmail", "encryptedAccessToken": "inicial", "encryptedRefreshToken": "r", "estado": "VINCULADA", "expiresAt": ""})
+	q := map[string]any{"idCuenta": "c1", "idViajero": "v1"}
+	if r := read(t, n, "v1", resources.LinkedAccountFind, q); r.Rows[0]["encrypted_access_token"] != "inicial" { // queda cacheado
+		t.Fatalf("lectura inicial: %+v", r)
+	}
+
+	failing.Store(true)
+	// Write responde éxito aunque la copia falle: la primaria ya confirmó (helper write exige err == nil).
+	write(t, n, "v1", resources.LinkedAccountSave, map[string]any{"idCuenta": "c1", "idViajero": "v1", "proveedor": "gmail", "encryptedAccessToken": "nuevo", "encryptedRefreshToken": "r", "estado": "VINCULADA", "expiresAt": ""})
+	if n.PendingReplications() != 1 {
+		t.Fatalf("debía quedar 1 replicación pendiente, hay %d", n.PendingReplications())
+	}
+	if r := read(t, n, "v1", resources.LinkedAccountFind, q); r.Rows[0]["encrypted_access_token"] != "nuevo" {
+		t.Fatalf("la lectura inmediata debía ver el dato nuevo (sin caché vieja): %+v", r)
+	}
+
+	n.FlushReplication(context.Background()) // la réplica sigue caída: no se aplica
+	if n.PendingReplications() != 1 {
+		t.Fatal("con la réplica caída la pendiente debía seguir en la lista")
+	}
+	failing.Store(false)
+	n.FlushReplication(context.Background())
+	if n.PendingReplications() != 0 {
+		t.Fatalf("la lista debía quedar vacía, hay %d", n.PendingReplications())
+	}
+	res, err := n.replica.Read(context.Background(), mustPartition(t, n, "v1"), mustOp(t, n, resources.LinkedAccountFind), ports.DataQuery{Resource: resources.LinkedAccountFind, Params: q})
+	if err != nil || res.Rows[0]["encrypted_access_token"] != "nuevo" {
+		t.Fatalf("la réplica debía tener el dato: %+v %v", res, err)
+	}
+}
+
+// [ADR-10] Dos escrituras con la réplica caída se aplican en orden al recuperarse.
+func TestPendingReplicationsApplyInOrder(t *testing.T) {
+	var failing atomic.Bool
+	failing.Store(true)
+	n, err := NewDataNode(Config{ID: "n", Role: RoleActive, Dir: t.TempDir(), Shards: 2,
+		ReplicationFault: func(operations.ReplicationRecord) error {
+			if failing.Load() {
+				return errors.New("réplica caída")
+			}
+			return nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.Close()
+	failing.Store(false)
+	write(t, n, "v1", resources.LinkedAccountSave, map[string]any{"idCuenta": "c1", "idViajero": "v1", "proveedor": "gmail", "encryptedAccessToken": "inicial", "encryptedRefreshToken": "r", "estado": "VINCULADA", "expiresAt": ""})
+	failing.Store(true)
+	write(t, n, "v1", resources.LinkedAccountSave, map[string]any{"idCuenta": "c1", "idViajero": "v1", "proveedor": "gmail", "encryptedAccessToken": "uno", "encryptedRefreshToken": "r", "estado": "VINCULADA", "expiresAt": ""})
+	write(t, n, "v1", resources.LinkedAccountSave, map[string]any{"idCuenta": "c1", "idViajero": "v1", "proveedor": "gmail", "encryptedAccessToken": "dos", "encryptedRefreshToken": "r", "estado": "VINCULADA", "expiresAt": ""})
+	if n.PendingReplications() != 2 {
+		t.Fatalf("pendientes: %d", n.PendingReplications())
+	}
+	failing.Store(false)
+	n.FlushReplication(context.Background())
+	res, _ := n.replica.Read(context.Background(), mustPartition(t, n, "v1"), mustOp(t, n, resources.LinkedAccountFind), ports.DataQuery{Params: map[string]any{"idCuenta": "c1", "idViajero": "v1"}})
+	if n.PendingReplications() != 0 || res.Rows[0]["encrypted_access_token"] != "dos" {
+		t.Fatalf("el último valor debía ser dos: %+v pendientes=%d", res, n.PendingReplications())
+	}
+}
+
+func mustPartition(t *testing.T, n *DataNode, id string) string {
+	t.Helper()
+	p, err := n.router.PartitionFor(id, operations.ScopeShard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func mustOp(t *testing.T, n *DataNode, res string) operations.Operation {
+	t.Helper()
+	op, err := n.catalog.Resolve(res, operations.Read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return op
+}
+
+// [ADR-21] Recover limpia down y Run vuelve a emitir heartbeat.
+func TestRecoverRestartsHeartbeat(t *testing.T) {
+	hb := stubs.NewInMemoryHeartbeatChannel(10*time.Millisecond, 3)
+	n, err := NewDataNode(Config{ID: "n", Role: RolePassive, Dir: t.TempDir(), Shards: 1, Heartbeat: hb, HeartbeatInterval: 10 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go n.Run(ctx)
+	waitFor(t, func() bool { _, ok := hb.Last("n"); return ok })
+	n.Stop()
+	waitFor(t, func() bool { return hb.Observe("n") == ports.NodeDead })
+	n.Recover()
+	waitFor(t, func() bool { return hb.Observe("n") == ports.NodeAlive })
+	if _, err := n.Read(context.Background(), "v1", ports.DataQuery{Resource: resources.TravelerFindByID, Params: map[string]any{"idViajero": "v1"}}); err != nil {
+		t.Fatalf("tras Recover el nodo debía atender: %v", err)
+	}
 }

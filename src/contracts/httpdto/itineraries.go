@@ -60,3 +60,14 @@ type DecisionRequest struct {
 type DecisionResponse struct {
 	Estado string `json:"estado"` // ACEPTADA | RECHAZADA
 }
+
+// OwnedItinerary es un itinerario del dueño dentro de GET /dashboard: sus reservas, los accesos vigentes y las
+// solicitudes pendientes de decisión. [ADR-13]
+type OwnedItinerary struct {
+	IDItinerario string               `json:"idItinerario"`
+	Nombre       string               `json:"nombre"`
+	LinkPublico  string               `json:"linkPublico"`
+	Arreglos     []ArrangementSummary `json:"arreglos"`
+	Accesos      []string             `json:"accesos"`     // idViajero con acceso vigente
+	Solicitudes  []AccessRequestItem  `json:"solicitudes"` // solo PENDIENTE
+}

@@ -325,7 +325,7 @@ C4Container
 | **LoadBalancer y ReplicaHeartbeatMonitor**          | Punto de entrada de la región. Distribuye requests entre réplicas y las saca de rotación si pierden heartbeats (3 pulsos de 10 s)                                                                                           | 1 por región                              | ADR08, 22             | QA06, QA07, QA04 |
 | **Replica (monolito modular)**              | Toda la lógica de negocio, stateless. Valida tokens localmente. Incluye los módulos API, authentication, permissions, travelarrangements, integrations y recommendations, más el renderizado SSR                                 | N por región, según demanda y geografía   | ADR02, 08, 16, 21     | QA06, QA07, QA04 |
 | **InMemoryMessageQueue**                    | Desacopla el broker de integraciones del módulo travelarrangements. Si la lógica cae, los mensajes quedan en la cola                                                                                                         | 1 ◇ (ubicación en despliegue sin definir) | ADR04                 | QA01, QA04       |
-| **PriorityQueueNode** | Ordena operaciones (lectura primero, escritura después, FIFO dentro de cada tipo). Monitorea heartbeats de los nodos de datos y ejecuta el intercambio de responsabilidades                                                 | 1 por región                              | ADR09, 21, 22         | QA06, QA07, QA04 |
+| **PriorityQueueNode** | Ordena operaciones (lectura primero, escritura después, FIFO dentro de cada tipo) con un carril por partición: particiones distintas se ejecutan al mismo tiempo. Monitorea heartbeats de los nodos de datos y ejecuta el intercambio de responsabilidades                                                 | 1 por región                              | ADR09, 21, 22         | QA06, QA07, QA04 |
 | **DataNode primario**                  | Caché de lecturas, base primaria de escrituras, réplicas de lectura, particionado por `travelerID`. Envía sincronización periódica a la instancia pasiva                                                                     | 1 activo por región                       | ADR10, 11, 21         | QA05, QA06, QA07 |
 | **DataNode pasivo**                    | Instancia del mismo módulo de datos. Asume el rol primario ante fallo del activo                                                                                                                                            | 1 por región                              | ADR21, 22             | QA04             |
 | **Proveedores de correo** (externo)         | API del correo, acceso por OAuth 2.0                                                                                                                                                                                        | n/a                                       | ADR15                 | QA08, QA15       |
@@ -436,6 +436,7 @@ flowchart TD
         HBE["ReplicaHeartbeatEmitter"]
 
         subgraph INTG ["integrations"]
+            LEAD["IntegrationsLeaderElector"]
             SCH["PollingScheduler"]
             CB["ProviderCircuitBreaker"]
             AE["EmailAdapter"]
@@ -474,6 +475,8 @@ flowchart TD
     HITL -->|"actualiza preferencias"| QCLI
     QCLI -->|"operaciones con prioridad"| PQ
 
+    LEAD -. "solo la líder ejecuta" .-> SCH
+    LEAD -. "solo la líder consume" .-> CONS
     SCH --> CB
     CB --> AE
     CB --> AA
@@ -535,6 +538,7 @@ flowchart TD
         PR[("PrimaryStore<br/>escrituras")]
         RR[("ReadReplicaStore")]
         SYNC["SyncEmitter"]
+        RET["ReplicationRetrier"]
         HBD["DataNodeHeartbeatEmitter"]
     end
     PAS["DataNode pasivo"]
@@ -545,7 +549,8 @@ flowchart TD
     SR -->|"escrituras"| PR
     CA -.->|"cache miss"| RR
     PR -.->|"invalida datos cambiados"| CA
-    PR ==>|"replicación de datos"| RR
+    PR ==>|"replicación de datos"| RET
+    RET ==>|"copia en orden, reintenta si falla"| RR
     PR --> SYNC
     SYNC ==>|"sincronización periódica de estado"| PAS
     HBD -.->|"heartbeat"| MON
@@ -562,7 +567,7 @@ flowchart TD
 | OptimisticState                   | client/web, móvil       | Aplica el cambio local al instante y revierte si el backend responde distinto de 2xx                  | ADR18          |
 | VisualPreferences              | client/web, móvil       | Lee y escribe orden y tema en LocalStorage o AsyncStorage antes de pedir datos                        | ADR19          |
 | RecommendationsPanel                     | client/web, móvil       | Request independiente, estado de carga y manejo de fallo sin bloquear las reservas                    | ADR23          |
-| LoadBalancer                         | LB                       | Reparte requests entre réplicas stateless                                                             | ADR08          |
+| LoadBalancer                         | LB                       | Reparte requests entre réplicas stateless. Todo el tráfico va por HTTPS con certificado autofirmado (`tls.go`): sin puerto http, HSTS y confianza solo en el certificado propio hacia las réplicas | ADR08, 12      |
 | ReplicaHeartbeatMonitor            | LB                       | Marca una réplica caída tras 3 pulsos perdidos (frecuencia de 10 s)                                   | ADR22, iter. 6 |
 | API (Controllers)                          | Replica | Único punto de entrada de los clientes. Autentica y enruta a módulos                                  | ADR01, 02      |
 | SignedTokenValidator                   | Replica | Valida firma y vigencia sin estado compartido                                                         | ADR16          |
@@ -573,6 +578,7 @@ flowchart TD
 | UpdateConsumer                | Replica | Consume la cola P2P y registra en travelarrangements                                                   | ADR04          |
 | PriorityQueueClient               | Replica | Encola toda operación de datos con su tipo (lectura o escritura)                                      | ADR09          |
 | ReplicaHeartbeatEmitter | Replica | Pulso periódico hacia el balanceador                                                                  | ADR22          |
+| IntegrationsLeaderElector              | Replica, integrations | Elige a la réplica viva de menor id (según el heartbeat de réplicas) que ejecuta el UpdateConsumer y el PollingScheduler; al caer o ceder se cancelan sus contextos. Sin consenso distribuido | ADR04, 21, 22  |
 | PollingScheduler                       | Replica, integrations | Dispara sondeos a intervalos cortos (máx. 2 min) para cumplir los 5 min de QA01                       | ADR05          |
 | ProviderCircuitBreaker | Replica, integrations | Por proveedor. Reintentos acotados con espera progresiva. Abre el circuito y avisa al usuario         | ADR07          |
 | EmailAdapter, AgencyAdapter, TravelSystemAdapter | Replica, integrations | Uno por tipo de proveedor. Traducen al modelo del puerto                                              | ADR05          |
@@ -582,12 +588,13 @@ flowchart TD
 | ConcurrentCollector                       | Replica, recommendations | Consulta en paralelo historial (varias tablas) y perfil                                               | ADR24          |
 | ContentBasedFilteringEngine        | Replica, recommendations | Filtra la lista de arreglos de proveedores por metadatos y preferencias                               | ADR25          |
 | HITLFeedback                       | Replica, recommendations | Analiza feedback y actualiza preferencias para la próxima recomendación                               | ADR25          |
-| ReadQueue y WriteQueue             | PriorityQueueNode | Lecturas antes que escrituras, FIFO por tipo                                                          | ADR09          |
-| DataHeartbeatMonitor y DataNodeSwitch  | PriorityQueueNode | Detecta caída del nodo activo y redirige al pasivo                                                    | ADR21, 22      |
+| ReadQueue y WriteQueue             | PriorityQueueNode | Lecturas antes que escrituras, FIFO por tipo, un carril (par de colas) por partición con un worker de escrituras y workers extra de solo lectura. Conoce la partición por el puerto `PartitionResolver` | ADR09, 11, 24  |
+| DataHeartbeatMonitor y DataNodeSwitch  | PriorityQueueNode | Detecta caída del nodo activo y redirige al pasivo. Reincorpora el nodo recuperado como pasivo tras instalarle una imagen completa (E4b) | ADR21, 22      |
 | PartitionRouter                       | DataNode            | Dirige cada operación al shard de `travelerID` ◇                                                       | ADR11          |
 | InMemoryCacheAdapter | DataNode            | Atiende lecturas frecuentes. Se invalida al escribir                                                  | ADR10          |
 | PrimaryStore y ReadReplicaStore | DataNode            | Escrituras en la primaria, replicación hacia las réplicas, lecturas con cache miss                    | ADR10          |
 | SyncEmitter                     | DataNode            | Envía estado periódicamente al nodo pasivo                                                            | ADR21          |
+| ReplicationRetrier              | DataNode            | Guarda y reintenta en orden las copias a la réplica de lectura que fallaron; mientras haya pendientes la partición se lee de la primaria | ADR10          |
 
 ---
 
@@ -1001,9 +1008,21 @@ sequenceDiagram
   ],
   "avisosProveedores": [
     { "proveedor": "string", "mensaje": "No se pudo conectar con el proveedor" }
+  ],
+  "itinerarios": [
+    {
+      "idItinerario": "string",
+      "nombre": "string",
+      "linkPublico": "/itinerarios/{idItinerario}",
+      "arreglos": [ { "idArreglo": "string", "tipo": "string", "titulo": "string", "fechaInicio": "ISO-8601", "estado": "string", "origen": "string" } ],
+      "accesos": ["idViajero"],
+      "solicitudes": [ { "idSolicitud": "string", "idViajero": "string", "estado": "PENDIENTE" } ]
+    }
   ]
 }
 ```
+
+`itinerarios` (ADR-13, Fase 7) son los itinerarios compartidos del viajero **como dueño**: sus reservas, los accesos vigentes y solo las solicitudes pendientes. Se incluyen en el dashboard para que la pantalla "Mis itinerarios" no necesite rutas nuevas; si Control de permisos no responde, el dashboard se entrega con la lista vacía.
 
 **✔ `GET /arreglos/{idArreglo}`**: detalle completo bajo demanda. Respuesta JSON o fragmento HTML para recarga parcial.
 
@@ -1183,6 +1202,19 @@ Cuando se crea una solicitud se genera la notificación al dueño (ADR13). El ca
 }
 ```
 
+#### E4b `PassiveRejoined` ◇
+
+Productor: DataNodeSwitch (invocado por DataHeartbeatMonitor, ADR22). Consumidor: registro de la región. Se emite cuando el nodo caído volvió a latir, recibió la imagen completa del activo y pasó a ser respaldo válido (ADR21).
+
+```json
+{
+  "regionId": "string",
+  "nodo": "string",
+  "versionEstado": 123,
+  "ocurridoEn": "ISO-8601"
+}
+```
+
 #### E5 `StateSync` ✔ flujo, ◇ payload
 
 Productor: nodo de datos primario. Consumidor: nodo de datos pasivo. Frecuencia periódica a definir (tradeoff costo y datos expuestos, ADR21).
@@ -1198,7 +1230,7 @@ Productor: nodo de datos primario. Consumidor: nodo de datos pasivo. Frecuencia 
 
 #### E6 `DataWritten` ✔ flujo, ◇ nombre
 
-Productor: base primaria. Consumidores: réplicas de lectura (sobreescritura) y caché (invalidación). Ver ADR10.
+Productor: base primaria. Suscriptores internos, en este orden y de forma síncrona: caché (invalidación) y réplica de lectura (copia, con `ReplicationRetrier` si falla). Ver ADR10.
 
 ```json
 {

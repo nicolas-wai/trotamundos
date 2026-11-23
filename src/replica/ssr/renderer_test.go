@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	permdomain "github.com/nicolas-wai/trotamundos/src/replica/permissions/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
@@ -29,7 +30,7 @@ func sampleDashboard() application.Dashboard {
 }
 
 func TestRenderDashboardShowsCriticalDataOnly(t *testing.T) {
-	html, err := NewSSRRenderer().RenderDashboard(context.Background(), sampleDashboard())
+	html, err := NewSSRRenderer().RenderDashboard(context.Background(), sampleDashboard(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func TestRenderDashboardShowsCriticalDataOnly(t *testing.T) {
 }
 
 func TestRenderDashboardWithoutTrips(t *testing.T) {
-	html, err := NewSSRRenderer().RenderDashboard(context.Background(), application.Dashboard{})
+	html, err := NewSSRRenderer().RenderDashboard(context.Background(), application.Dashboard{}, nil)
 	if err != nil || !strings.Contains(string(html), "No tienes viajes activos.") {
 		t.Fatalf("dashboard vacío: %q %v", html, err)
 	}
@@ -74,5 +75,39 @@ func TestRenderArrangementDetailIncludesTypedFields(t *testing.T) {
 		if !strings.Contains(string(html), want) {
 			t.Errorf("el detalle debe contener %q: %s", want, html)
 		}
+	}
+}
+
+// [ADR-13] La sección "Mis itinerarios" muestra reservas, solicitudes pendientes y accesos, escapa los datos y
+// ofrece las acciones en español.
+func TestRenderDashboardItinerariesSection(t *testing.T) {
+	it := permdomain.SharedItinerary{
+		ItineraryID: "itin-1", Name: "Europa <script>", PublicLink: "/itinerarios/itin-1",
+		Arrangements: []permdomain.ArrangementRef{{ArrangementID: "a1", Type: "VUELO", Title: "Vuelo a Madrid", StartAt: time.Date(2027, 3, 10, 10, 0, 0, 0, time.UTC)}},
+		Requests:     []permdomain.AccessRequest{{RequestID: "sol-1", RequesterTravelerID: "beto-id", Status: permdomain.RequestPending}},
+		Permissions:  []permdomain.AccessPermission{{AuthorizedTravelerID: "caro-id", Active: true}},
+	}
+	html, err := NewSSRRenderer().RenderDashboard(context.Background(), application.Dashboard{}, []permdomain.SharedItinerary{it})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(html)
+	for _, want := range []string{
+		`data-itinerary-id="itin-1"`, "Mis itinerarios compartidos", "Vuelo a Madrid", "10/03/2027 10:00",
+		`data-request-id="sol-1"`, `data-traveler-id="beto-id"`, `data-action="accept-request"`, `data-action="reject-request"`,
+		`data-traveler-id="caro-id"`, `data-action="revoke-access"`, "Aceptar", "Rechazar", "Revocar",
+		"Crear itinerario", "Ver un itinerario compartido conmigo", "Abrir itinerario",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("el HTML debe contener %q", want)
+		}
+	}
+	if strings.Contains(out, "<script>") {
+		t.Error("html/template debe escapar el nombre del itinerario")
+	}
+	// Sin itinerarios la sección sigue ofreciendo crear uno y abrir uno ajeno, con textos vacíos en español.
+	empty, _ := NewSSRRenderer().RenderDashboard(context.Background(), application.Dashboard{}, nil)
+	if !strings.Contains(string(empty), "Crear itinerario") || strings.Contains(string(empty), "data-itinerary-id") {
+		t.Error("sin itinerarios solo debe estar el formulario de alta")
 	}
 }

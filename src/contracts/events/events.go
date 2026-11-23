@@ -66,6 +66,15 @@ type ResponsibilitySwap struct {
 	OcurridoEn    time.Time `json:"ocurridoEn"`
 }
 
+// PassiveRejoined es E4b `PasivoReincorporado`: el nodo caído volvió, recibió la imagen completa del activo
+// y quedó como respaldo válido. [ADR-21]
+type PassiveRejoined struct {
+	RegionID      string    `json:"regionId"`
+	Nodo          string    `json:"nodo"`
+	VersionEstado int64     `json:"versionEstado"`
+	OcurridoEn    time.Time `json:"ocurridoEn"`
+}
+
 // StateSync es E5 `SincronizacionEstado`. [ADR-21]
 type StateSync struct {
 	Origen        string    `json:"origen"`

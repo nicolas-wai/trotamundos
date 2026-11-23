@@ -65,6 +65,24 @@ func (s *PrimaryStore) Write(ctx context.Context, partition string, op operation
 	return ports.DataResult{RowsAffected: n}, operations.ReplicationRecord{Partition: partition, Op: op, Args: args}, version, nil
 }
 
+// Read ejecuta una lectura nombrada directamente en la primaria. Se usa solo mientras la réplica de lectura
+// tiene replicaciones pendientes en la partición. [ADR-10]
+func (s *PrimaryStore) Read(ctx context.Context, partition string, op operations.Operation, query ports.DataQuery) (ports.DataResult, error) {
+	db, err := s.db(partition)
+	if err != nil {
+		return ports.DataResult{}, err
+	}
+	args, err := op.BindArgs(query.Params)
+	if err != nil {
+		return ports.DataResult{}, err
+	}
+	rows, err := db.Query(ctx, op.SQL, args...)
+	if err != nil {
+		return ports.DataResult{}, err
+	}
+	return ports.DataResult{Rows: rows}, nil
+}
+
 // Version devuelve la suma de versiones de todas las particiones (versionEstado de E5).
 func (s *PrimaryStore) Version() int64 {
 	s.mu.Lock()

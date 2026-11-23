@@ -24,7 +24,7 @@ US03 filtros y whitelists (solo entidad `TrustedSender` y atributo `Sender`), US
 
 | Elemento de AD                                  | Equivalente local (misma interfaz/puerto)                                                    |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| HTTPS / TLS (ADR12)                             | HTTP en localhost, comentario `// [Prototipo] HTTP local simulando HTTPS/TLS`                |
+| HTTPS / TLS (ADR12)                             | ~~HTTP en localhost~~ **Reemplazada por `ImplementationPlan2.md` fase 8.2:** HTTPS con certificado autofirmado |
 | DNS y balanceo geográfico (ADR21)               | Una sola región configurada por `RegionConfig` (QA13). Sin DNS                               |
 | Load Balancer (ADR08)                           | `LoadBalancer` propio (round-robin con `httputil.ReverseProxy`) en `:8080`                  |
 | N réplicas del monolito (ADR08, ADR21)          | N=2 instancias de `Replica` en el mismo proceso (`:8081`, `:8082`), sin estado compartido    |

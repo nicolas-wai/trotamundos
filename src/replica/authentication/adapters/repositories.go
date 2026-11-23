@@ -142,8 +142,14 @@ func (r *QueueLinkedEmailAccountRepository) Save(ctx context.Context, a domain.L
 		"encryptedAccessToken":  base64.StdEncoding.EncodeToString(a.EncryptedAccessToken),
 		"encryptedRefreshToken": base64.StdEncoding.EncodeToString(a.EncryptedRefreshToken),
 		"estado":                string(a.Status),
+		"expiresAt":             expiresAtString(a.ExpiresAt),
 	})
 	if err != nil {
+		return err
+	}
+	if a.Status != domain.EmailAccountLinked {
+		// Una cuenta que requiere volver a vincularse sale del directorio: el planificador deja de sondearla. [ADR-15]
+		_, err = r.data.Write(ctx, "", resources.DirectoryLinkedAccountRemove, map[string]any{"idCuenta": a.AccountID, "idViajero": a.TravelerID})
 		return err
 	}
 	_, err = r.data.Write(ctx, "", resources.DirectoryLinkedAccountRegister, map[string]any{
@@ -167,6 +173,7 @@ func (r *QueueLinkedEmailAccountRepository) FindByID(ctx context.Context, travel
 	return domain.LinkedEmailAccount{
 		AccountID: str(row["id_cuenta"]), TravelerID: str(row["id_viajero"]), Provider: str(row["proveedor"]),
 		EncryptedAccessToken: access, EncryptedRefreshToken: refresh, Status: domain.EmailAccountStatus(str(row["estado"])),
+		ExpiresAt: parseExpiresAt(str(row["expires_at"])),
 	}, nil
 }
 
@@ -245,4 +252,19 @@ func (r *QueuePreferencesRepository) Save(ctx context.Context, p domain.Traveler
 	}
 	_, err := r.data.Write(ctx, p.TravelerID, resources.PreferencesSave, params)
 	return err
+}
+
+func expiresAtString(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func parseExpiresAt(s string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

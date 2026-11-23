@@ -45,3 +45,9 @@ type DataGateway interface {
 	Read(ctx context.Context, travelerID, resource string, params map[string]any) (DataResult, error)
 	Write(ctx context.Context, travelerID, resource string, params map[string]any) (DataResult, error)
 }
+
+// SyncTarget [ADR-21] Nodo de datos destino de una sincronización completa: recibe la imagen del primario.
+type SyncTarget interface {
+	ID() string
+	InstallSnapshot(ctx context.Context, partition, snapshotPath string) error
+}

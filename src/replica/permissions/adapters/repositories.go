@@ -75,12 +75,32 @@ func (r *QueueSharedItineraryRepository) FindByID(ctx context.Context, itinerary
 	if len(res.Rows) == 0 {
 		return domain.SharedItinerary{}, application.ErrItineraryNotFound
 	}
-	it := domain.SharedItinerary{
-		ItineraryID: itineraryID, OwnerID: ownerID,
-		Name: str(res.Rows[0], "nombre"), PublicLink: str(res.Rows[0], "link_publico"),
-		ArrangementIDs: []string{},
+	return r.loadAggregate(ctx, ownerID, itineraryID, str(res.Rows[0], "nombre"), str(res.Rows[0], "link_publico"))
+}
+
+// ListByOwner devuelve los itinerarios del dueño (agregado completo) leyendo solo su shard. [ADR-11][ADR-13]
+func (r *QueueSharedItineraryRepository) ListByOwner(ctx context.Context, ownerID string) ([]domain.SharedItinerary, error) {
+	res, err := r.data.Read(ctx, ownerID, resources.ItineraryListByOwner, map[string]any{"idViajero": ownerID})
+	if err != nil {
+		return nil, err
 	}
-	if res, err = r.data.Read(ctx, ownerID, resources.ItineraryArrangementList, key); err != nil {
+	out := make([]domain.SharedItinerary, 0, len(res.Rows))
+	for _, row := range res.Rows {
+		it, err := r.loadAggregate(ctx, ownerID, str(row, "id_itinerario"), str(row, "nombre"), str(row, "link_publico"))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, nil
+}
+
+// loadAggregate carga arreglos, permisos y solicitudes de un itinerario del shard del dueño.
+func (r *QueueSharedItineraryRepository) loadAggregate(ctx context.Context, ownerID, itineraryID, name, link string) (domain.SharedItinerary, error) {
+	key := map[string]any{"idItinerario": itineraryID, "idViajero": ownerID}
+	it := domain.SharedItinerary{ItineraryID: itineraryID, OwnerID: ownerID, Name: name, PublicLink: link, ArrangementIDs: []string{}}
+	res, err := r.data.Read(ctx, ownerID, resources.ItineraryArrangementList, key)
+	if err != nil {
 		return domain.SharedItinerary{}, err
 	}
 	for _, row := range res.Rows {

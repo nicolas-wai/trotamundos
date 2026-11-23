@@ -82,6 +82,9 @@ type Region struct {
 
 	mu             sync.Mutex
 	swaps          []events.ResponsibilitySwap
+	rejoins        []events.PassiveRejoined
+	alerts         []string
+	runCtx         context.Context
 	replicaCancels []context.CancelFunc
 	wg             sync.WaitGroup
 }
@@ -96,7 +99,7 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 		id := fmt.Sprintf("%s-data-%s", cfg.RegionID, suffix)
 		return datanode.NewDataNode(datanode.Config{
 			ID: id, Role: role, Dir: filepath.Join(cfg.DataDir, id), Shards: cfg.ShardCount,
-			Heartbeat: r.DataHeartbeats, HeartbeatInterval: cfg.HeartbeatInterval, SyncInterval: cfg.HeartbeatInterval,
+			Heartbeat: r.DataHeartbeats, HeartbeatInterval: cfg.HeartbeatInterval, SyncInterval: cfg.HeartbeatInterval, ReplicationRetryInterval: cfg.HeartbeatInterval,
 		})
 	}
 	var err error
@@ -117,7 +120,17 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 		r.swaps = append(r.swaps, e4)
 		r.mu.Unlock()
 	})
+	r.Switch.OnRejoin(func(e4b events.PassiveRejoined) { // E4b: el nodo caído volvió como pasivo [ADR-21]
+		r.mu.Lock()
+		r.rejoins = append(r.rejoins, e4b)
+		r.mu.Unlock()
+	})
 	monitor := priorityqueue.NewDataHeartbeatMonitor(r.DataHeartbeats, r.Switch, cfg.HeartbeatInterval)
+	monitor.OnAlert(func(msg string) { // aviso registrado (p. ej. ambos nodos caídos) [ADR-22]
+		r.mu.Lock()
+		r.alerts = append(r.alerts, msg)
+		r.mu.Unlock()
+	})
 	r.Queue = priorityqueue.NewPriorityQueueNode(r.Switch, monitor)
 
 	var submitter priorityqueueclient.Submitter = r.Queue
@@ -127,7 +140,7 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 	r.MessageQueue = messagequeue.NewInMemoryMessageQueue()
 	r.EventBus = messagequeue.NewInMemoryEventBus()
 	r.ExternalAPIs = ExternalAPIs{
-		OAuth: stubs.NewMockOAuth2AuthAdapter(), Email: stubs.NewStubEmailProviderAPI(),
+		OAuth: stubs.NewMockOAuth2AuthAdapter().WithClock(opts.Clock), Email: stubs.NewStubEmailProviderAPI(),
 		Agency: stubs.NewStubAgencyAPI(), TravelSystem: stubs.NewStubTravelSystemAPI(),
 	}
 	r.OwnerNotifier = stubs.NewInMemoryOwnerNotifier()
@@ -138,13 +151,17 @@ func New(cfg config.RegionConfig, opts Options) (*Region, error) {
 			_ = r.OwnerNotifier.NotifyAccessRequest(ctx, e7)
 		}
 	})
+	replicaIDs := make([]string, cfg.ReplicaCount)
+	for i := range replicaIDs {
+		replicaIDs[i] = ReplicaID(cfg, i)
+	}
 	for i := 0; i < cfg.ReplicaCount; i++ {
-		id := ReplicaID(cfg, i)
+		id := replicaIDs[i]
 		rep, err := replica.New(id, cfg, replica.Dependencies{
 			Queue: submitter, Heartbeat: r.ReplicaHeartbeats, Clock: opts.Clock, PasswordCost: opts.PasswordCost,
 			MessageQueue: r.MessageQueue, EventBus: r.EventBus, OAuth: r.ExternalAPIs.OAuth, ProviderCatalog: r.ProviderCatalog,
-			Providers:       integrations.Clients{Mail: r.ExternalAPIs.Email, Agency: r.ExternalAPIs.Agency, TravelSystem: r.ExternalAPIs.TravelSystem},
-			RunIntegrations: i == 0,
+			Providers:  integrations.Clients{Mail: r.ExternalAPIs.Email, Agency: r.ExternalAPIs.Agency, TravelSystem: r.ExternalAPIs.TravelSystem},
+			ReplicaIDs: replicaIDs,
 		})
 		if err != nil {
 			r.ActiveNode.Close()
@@ -163,12 +180,12 @@ func ReplicaID(cfg config.RegionConfig, i int) string {
 }
 
 // NewLoadBalancer crea el balanceador sobre las URLs de las réplicas (en el mismo orden) y su monitor de heartbeats.
-func (r *Region) NewLoadBalancer(urls []*url.URL) *loadbalancer.LoadBalancer {
+func (r *Region) NewLoadBalancer(urls []*url.URL, opts ...loadbalancer.Option) *loadbalancer.LoadBalancer {
 	backends := make([]loadbalancer.Backend, len(urls))
 	for i, u := range urls {
 		backends[i] = loadbalancer.Backend{ID: r.Replicas[i].ID, URL: u}
 	}
-	r.LB = loadbalancer.NewLoadBalancer(backends)
+	r.LB = loadbalancer.NewLoadBalancer(backends, opts...)
 	r.LBMonitor = loadbalancer.NewReplicaHeartbeatMonitor(r.ReplicaHeartbeats, r.LB, r.Config.HeartbeatInterval)
 	return r.LB
 }
@@ -182,30 +199,64 @@ func (r *Region) Start(ctx context.Context) {
 	run(r.Queue.Run, ctx)
 	run(r.ActiveNode.Run, ctx)
 	run(r.PassiveNode.Run, ctx)
-	for _, rep := range r.Replicas {
-		rctx, cancel := context.WithCancel(ctx)
-		r.replicaCancels = append(r.replicaCancels, cancel)
-		run(rep.Heartbeat.Run, rctx)
-		if rep.Consumer != nil {
-			run(rep.Consumer.Run, ctx) // único consumidor de la cola P2P [ADR-04]
-		}
-		if rep.Integrations != nil && r.Config.PollingEnabled {
-			run(rep.Integrations.Scheduler.Run, ctx) // sondeo cada <= 2 min [ADR-05][QA-01]
-		}
+	r.runCtx = ctx
+	r.replicaCancels = make([]context.CancelFunc, len(r.Replicas))
+	for i := range r.Replicas {
+		r.startReplica(i)
 	}
 	if r.LBMonitor != nil {
 		run(r.LBMonitor.Run, ctx)
 	}
 }
 
-// StopReplica simula la caída de la réplica i: deja de emitir heartbeats. [QA-04]
-func (r *Region) StopReplica(i int) { r.replicaCancels[i]() }
+// startReplica lanza los procesos de la réplica i atados a su propio contexto: heartbeat y, si es la líder,
+// consumidor y planificador [ADR-04][ADR-21]. Cancelar ese contexto simula su caída.
+func (r *Region) startReplica(i int) {
+	rep := r.Replicas[i]
+	rctx, cancel := context.WithCancel(r.runCtx)
+	r.mu.Lock()
+	r.replicaCancels[i] = cancel
+	r.mu.Unlock()
+	r.wg.Add(1)
+	go func() { defer r.wg.Done(); _ = rep.Heartbeat.Run(rctx) }()
+	if rep.Leader != nil {
+		r.wg.Add(1)
+		go func() { defer r.wg.Done(); rep.RunIntegrations(rctx, r.Config.PollingEnabled) }()
+	}
+}
+
+// StopReplica simula la caída de la réplica i: deja de emitir heartbeats y detiene su consumidor y planificador
+// si los tenía. [QA-04][ADR-21]
+func (r *Region) StopReplica(i int) {
+	r.mu.Lock()
+	cancel := r.replicaCancels[i]
+	r.mu.Unlock()
+	cancel()
+}
+
+// RecoverReplica simula que la réplica i vuelve: retoma heartbeats y, si le corresponde, el liderazgo. Solo tiene
+// sentido tras StopReplica. [ADR-21]
+func (r *Region) RecoverReplica(i int) { r.startReplica(i) }
 
 // Swaps devuelve los eventos E4 emitidos hasta ahora.
 func (r *Region) Swaps() []events.ResponsibilitySwap {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]events.ResponsibilitySwap(nil), r.swaps...)
+}
+
+// Rejoins devuelve los eventos E4b de reincorporación del pasivo emitidos hasta ahora. [ADR-21]
+func (r *Region) Rejoins() []events.PassiveRejoined {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]events.PassiveRejoined(nil), r.rejoins...)
+}
+
+// DataAlerts devuelve los avisos del monitor de nodos de datos (ambos caídos, pasivo sin sincronizar). [ADR-22]
+func (r *Region) DataAlerts() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.alerts...)
 }
 
 // Close espera a los procesos de fondo (el contexto de Start ya debe estar cancelado) y cierra los archivos.

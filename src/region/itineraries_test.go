@@ -1,6 +1,8 @@
 package region_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -224,5 +226,59 @@ func TestItineraryArrangementsAndDeletion(t *testing.T) {
 	}
 	if resp, _ := e.do(t, "DELETE", e.path("/accesos/"+betoID), e.ownerToken, nil); resp.StatusCode != 404 {
 		t.Fatalf("revocar en itinerario eliminado: %d", resp.StatusCode)
+	}
+}
+
+// Fase 7 (ADR-13): "Mis itinerarios" viaja en el dashboard (JSON y HTML), sin rutas nuevas, y solo para el dueño.
+func TestDashboardIncludesOwnedItinerariesWithRequestsAndAccesses(t *testing.T) {
+	e := newItineraryEnv(t)
+	betoID, beto := e.signUp(t, "beto@example.com")
+	caroID, caro := e.signUp(t, "caro@example.com")
+	_, resp1 := e.do(t, "POST", e.path("/solicitudes"), beto, nil)
+	_, resp2 := e.do(t, "POST", e.path("/solicitudes"), caro, nil)
+	if r, b := e.do(t, "POST", e.path("/solicitudes/"+resp1["idSolicitud"].(string)+"/decision"), e.ownerToken, map[string]any{"decision": "ACEPTAR"}); r.StatusCode != 200 {
+		t.Fatalf("aceptar: %d %v", r.StatusCode, b)
+	}
+
+	var d struct {
+		Itinerarios []struct {
+			IDItinerario string   `json:"idItinerario"`
+			Nombre       string   `json:"nombre"`
+			Accesos      []string `json:"accesos"`
+			Arreglos     []any    `json:"arreglos"`
+			Solicitudes  []struct {
+				IDSolicitud string `json:"idSolicitud"`
+				IDViajero   string `json:"idViajero"`
+				Estado      string `json:"estado"`
+			} `json:"solicitudes"`
+		} `json:"itinerarios"`
+	}
+	_, raw := e.raw(t, "GET", "/dashboard", e.ownerToken, "application/json", nil)
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Itinerarios) != 1 || d.Itinerarios[0].IDItinerario != e.itineraryID || d.Itinerarios[0].Nombre != "Lisboa 2027" || len(d.Itinerarios[0].Arreglos) != 1 {
+		t.Fatalf("itinerarios del dueño: %s", raw)
+	}
+	it := d.Itinerarios[0]
+	if len(it.Accesos) != 1 || it.Accesos[0] != betoID {
+		t.Fatalf("accesos vigentes: %v", it.Accesos)
+	}
+	if len(it.Solicitudes) != 1 || it.Solicitudes[0].IDViajero != caroID || it.Solicitudes[0].IDSolicitud != resp2["idSolicitud"] || it.Solicitudes[0].Estado != "PENDIENTE" {
+		t.Fatalf("solo la solicitud pendiente de Caro: %+v", it.Solicitudes)
+	}
+
+	// El HTML SSR trae la sección con las acciones y textos en español; un invitado no ve itinerarios ajenos.
+	_, html := e.raw(t, "GET", "/dashboard", e.ownerToken, "text/html", nil)
+	for _, want := range []string{"Mis itinerarios compartidos", "Lisboa 2027", `data-request-id="` + resp2["idSolicitud"].(string) + `"`, "Aceptar", "Rechazar", "Revocar", "Crear itinerario"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("el HTML del dueño debe contener %q", want)
+		}
+	}
+	if _, guest := e.raw(t, "GET", "/dashboard", beto, "text/html", nil); strings.Contains(guest, "Lisboa 2027") || strings.Contains(guest, "data-request-id") {
+		t.Fatal("el invitado no debe ver los itinerarios ni las solicitudes del dueño")
+	}
+	if _, guestJSON := e.raw(t, "GET", "/dashboard", beto, "application/json", nil); !strings.Contains(guestJSON, `"itinerarios":[]`) {
+		t.Fatalf("sin itinerarios propios la lista va vacía (no null): %s", guestJSON)
 	}
 }

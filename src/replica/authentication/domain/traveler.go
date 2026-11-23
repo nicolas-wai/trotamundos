@@ -40,6 +40,8 @@ type EmailAccountStatus string
 const (
 	EmailAccountLinked  EmailAccountStatus = "VINCULADA"
 	EmailAccountRevoked EmailAccountStatus = "REVOCADA"
+	// EmailAccountRelinkRequired: el proveedor rechazó la renovación del token; el viajero debe volver a vincular. [ADR-15]
+	EmailAccountRelinkRequired EmailAccountStatus = "REQUIERE_VINCULAR"
 )
 
 // LinkedEmailAccount es un vínculo OAuth 2.0 revocable con un proveedor de correo. [ADR-15]
@@ -50,6 +52,7 @@ type LinkedEmailAccount struct {
 	Provider              string
 	EncryptedAccessToken  []byte
 	EncryptedRefreshToken []byte
+	ExpiresAt             time.Time // vencimiento del access token (cero = desconocido) [ADR-15]
 	Status                EmailAccountStatus
 }
 

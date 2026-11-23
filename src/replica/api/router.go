@@ -9,7 +9,7 @@ import (
 )
 
 // NewRouter registra todas las rutas de AD §6.2 (patrones Go 1.22+, rutas en español según el contrato).
-// [Prototipo] HTTP local simulando HTTPS/TLS [ADR-12].
+// [ADR-12] Se sirve solo por https (TLS lo termina cada servidor); el balanceador agrega Strict-Transport-Security.
 // Las rutas de autenticación y el shell web estático son públicos; el resto exige token válido
 // (tokenvalidator [ADR-16]).
 func NewRouter(c *Controllers, v *tokenvalidator.SignedTokenValidator) http.Handler {

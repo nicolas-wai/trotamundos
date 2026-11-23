@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/contracts/apierror"
 	"github.com/nicolas-wai/trotamundos/src/httpresponse"
@@ -25,7 +26,7 @@ type member struct {
 }
 
 // LoadBalancer [ADR-08] Balanceador de carga round-robin sobre las réplicas vivas del monolito.
-// [Prototipo] HTTP local simulando HTTPS/TLS [ADR-12].
+// [ADR-12] Con WithBackendTLS habla https con las réplicas confiando solo en el certificado propio.
 // ReplicaHeartbeatMonitor retira y reincorpora réplicas con SetHealthy [ADR-22].
 type LoadBalancer struct {
 	mu      sync.RWMutex
@@ -33,11 +34,36 @@ type LoadBalancer struct {
 	next    atomic.Uint64
 }
 
+// Option personaliza el balanceador.
+type Option func(*options)
+
+type options struct{ transport http.RoundTripper }
+
+// WithBackendTLS [ADR-12] El balanceador confía solo en el x509.CertPool dado al hablar con las réplicas
+// (sin InsecureSkipVerify).
+func WithBackendTLS(m TLSMaterial) Option {
+	return func(o *options) {
+		o.transport = &http.Transport{TLSClientConfig: m.ClientConfig(), MaxIdleConnsPerHost: 256, IdleConnTimeout: 90 * time.Second}
+	}
+}
+
 // NewLoadBalancer crea el balanceador; todas las réplicas arrancan vivas.
-func NewLoadBalancer(backends []Backend) *LoadBalancer {
+func NewLoadBalancer(backends []Backend, opts ...Option) *LoadBalancer {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	lb := &LoadBalancer{}
 	for _, b := range backends {
 		p := httputil.NewSingleHostReverseProxy(b.URL)
+		if o.transport != nil {
+			p.Transport = o.transport
+		}
+		// La réplica ya puede traer HSTS: se quita para no duplicarlo con el del balanceador.
+		p.ModifyResponse = func(resp *http.Response) error {
+			resp.Header.Del("Strict-Transport-Security")
+			return nil
+		}
 		p.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 			httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "Réplica no disponible")
 		}
@@ -97,6 +123,7 @@ func (lb *LoadBalancer) pick() *member {
 
 // ServeHTTP reparte la request a la siguiente réplica viva en orden round-robin.
 func (lb *LoadBalancer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Strict-Transport-Security", HSTSHeader) // [ADR-12]
 	m := lb.pick()
 	if m == nil {
 		httpresponse.WriteError(w, http.StatusServiceUnavailable, apierror.ModuloNoDisponible, "No hay réplicas disponibles")

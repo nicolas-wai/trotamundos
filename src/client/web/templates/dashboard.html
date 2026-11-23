@@ -34,4 +34,53 @@
 {{- else}}
   <p class="empty">No tienes viajes activos.</p>
 {{- end}}
+{{template "itineraries" .Itineraries}}
+</section>{{end}}
+{{/* [ADR-13] "Mis itinerarios": el dueño decide solicitudes y revoca accesos; el invitado abre un itinerario por su enlace. */}}
+{{define "itineraries"}}<section class="itineraries" data-role="itineraries">
+  <h2>Mis itinerarios compartidos</h2>
+  <form class="itinerary-create" data-form="create-itinerary">
+    <label>Nombre del itinerario <input type="text" name="nombre" maxlength="200" required></label>
+    <button type="submit">Crear itinerario</button>
+  </form>
+{{- range .}}
+  <article class="itinerary" data-itinerary-id="{{.ID}}" data-name="{{.Name}}">
+    <header>
+      <h3>{{.Name}}</h3>
+      <p class="itinerary-link">Enlace para compartir: <code>{{.Link}}</code></p>
+      <button type="button" class="secondary" data-action="delete-itinerary">Eliminar itinerario</button>
+    </header>
+    <h4>Reservas incluidas</h4>
+    <ul class="itinerary-arrangements">
+    {{- range .Arrangements}}
+      <li class="itinerary-arrangement" data-arrangement-id="{{.ID}}"><span class="badge">{{.TypeLabel}}</span> <span class="title">{{.Title}}</span> <span class="when">{{.StartText}}</span> <button type="button" class="secondary" data-action="remove-itinerary-arrangement">Quitar</button></li>
+    {{- else}}
+      <li class="empty">Este itinerario aún no tiene reservas.</li>
+    {{- end}}
+    </ul>
+    <p class="itinerary-add"><select data-role="arrangement-select" aria-label="Reserva a agregar"></select> <button type="button" data-action="add-itinerary-arrangement">Agregar reserva</button></p>
+    <h4>Solicitudes de acceso pendientes</h4>
+    <ul class="itinerary-requests">
+    {{- range .Requests}}
+      <li class="request" data-request-id="{{.RequestID}}" data-traveler-id="{{.TravelerID}}"><span class="who">Viajero {{.TravelerID}}</span> <button type="button" data-action="accept-request">Aceptar</button> <button type="button" class="secondary" data-action="reject-request">Rechazar</button></li>
+    {{- else}}
+      <li class="empty">No hay solicitudes pendientes.</li>
+    {{- end}}
+    </ul>
+    <h4>Accesos vigentes</h4>
+    <ul class="itinerary-accesses">
+    {{- range .Accesses}}
+      <li class="access" data-traveler-id="{{.TravelerID}}"><span class="who">Viajero {{.TravelerID}}</span> <button type="button" class="secondary" data-action="revoke-access">Revocar</button></li>
+    {{- else}}
+      <li class="empty">Nadie tiene acceso todavía.</li>
+    {{- end}}
+    </ul>
+  </article>
+{{- end}}
+  <h2>Ver un itinerario compartido conmigo</h2>
+  <form class="itinerary-open" data-form="open-itinerary">
+    <label>Enlace o código del itinerario <input type="text" name="enlace" required></label>
+    <button type="submit">Abrir itinerario</button>
+  </form>
+  <div class="guest-view" data-role="guest-view" aria-live="polite"></div>
 </section>{{end}}

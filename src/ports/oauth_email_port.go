@@ -12,6 +12,9 @@ var (
 	ErrInvalidAuthorizationCode = errors.New("código de autorización inválido")
 	// ErrOAuthAccountRevoked: la cuenta ya fue revocada en el proveedor.
 	ErrOAuthAccountRevoked = errors.New("cuenta OAuth revocada")
+	// ErrEmailRelinkRequired: el proveedor rechazó la renovación del token; el viajero debe volver a vincular la
+	// cuenta. No es una falla del proveedor. [ADR-15]
+	ErrEmailRelinkRequired = errors.New("la cuenta de correo requiere volver a vincularse")
 )
 
 // OAuthTokens son los tokens OAuth 2.0 obtenidos del proveedor de correo.

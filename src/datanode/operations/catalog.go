@@ -118,8 +118,8 @@ func DefaultCatalog() *Catalog {
 		{resources.DirectoryProviderNoticeList, Read, ScopeDirectory, `SELECT id_proveedor, id_viajero, mensaje, proximo_intento FROM provider_notices ORDER BY id_proveedor`, nil, ""},
 		{resources.DirectoryProviderNoticeClear, Write, ScopeDirectory, `DELETE FROM provider_notices WHERE id_proveedor = ?`, []string{"idProveedor"}, "PERFIL"},
 		// Cuentas de correo vinculadas (tokens OAuth cifrados, en base64) en el shard del viajero [ADR-15].
-		{resources.LinkedAccountSave, Write, ScopeShard, `INSERT OR REPLACE INTO linked_email_accounts (id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado) VALUES (?, ?, ?, ?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor", "encryptedAccessToken", "encryptedRefreshToken", "estado"}, "PERFIL"},
-		{resources.LinkedAccountFind, Read, ScopeShard, `SELECT id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, ""},
+		{resources.LinkedAccountSave, Write, ScopeShard, `INSERT OR REPLACE INTO linked_email_accounts (id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, []string{"idCuenta", "idViajero", "proveedor", "encryptedAccessToken", "encryptedRefreshToken", "estado", "expiresAt"}, "PERFIL"},
+		{resources.LinkedAccountFind, Read, ScopeShard, `SELECT id_cuenta, id_viajero, proveedor, encrypted_access_token, encrypted_refresh_token, estado, expires_at FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, ""},
 		{resources.LinkedAccountDelete, Write, ScopeShard, `DELETE FROM linked_email_accounts WHERE id_cuenta = ? AND id_viajero = ?`, []string{"idCuenta", "idViajero"}, "PERFIL"},
 
 		// Fase 5 — Itinerarios compartidos [ADR-13][ADR-11]. El directorio ◇ resuelve el shard del dueño a partir de
@@ -129,6 +129,7 @@ func DefaultCatalog() *Catalog {
 		{resources.DirectoryItineraryRemove, Write, ScopeDirectory, `DELETE FROM itinerary_directory WHERE id_itinerario = ? AND id_viajero_dueno = ?`, []string{"idItinerario", "idDueno"}, "PERMISO"},
 		{resources.ItineraryCreate, Write, ScopeShard, `INSERT INTO shared_itineraries (id_itinerario, id_viajero, nombre, link_publico) VALUES (?, ?, ?, ?)`, []string{"idItinerario", "idViajero", "nombre", "linkPublico"}, "PERMISO"},
 		{resources.ItineraryFind, Read, ScopeShard, `SELECT id_itinerario, id_viajero, nombre, link_publico FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, ""},
+		{resources.ItineraryListByOwner, Read, ScopeShard, `SELECT id_itinerario, id_viajero, nombre, link_publico FROM shared_itineraries WHERE id_viajero = ? ORDER BY id_itinerario`, []string{"idViajero"}, ""},
 		{resources.ItineraryDelete, Write, ScopeShard, `DELETE FROM shared_itineraries WHERE id_itinerario = ? AND id_viajero = ?`, []string{"idItinerario", "idViajero"}, "PERMISO"},
 		{resources.ItineraryArrangementAdd, Write, ScopeShard, `INSERT OR IGNORE INTO itinerary_arrangements (id_itinerario, id_viajero, id_arreglo) VALUES (?, ?, ?)`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},
 		{resources.ItineraryArrangementRemove, Write, ScopeShard, `DELETE FROM itinerary_arrangements WHERE id_itinerario = ? AND id_viajero = ? AND id_arreglo = ?`, []string{"idItinerario", "idViajero", "idArreglo"}, "PERMISO"},

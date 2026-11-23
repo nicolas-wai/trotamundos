@@ -33,6 +33,21 @@ func (r *fakeRepo) FindByID(_ context.Context, id string) (domain.SharedItinerar
 	return cp, nil
 }
 
+func (r *fakeRepo) ListByOwner(_ context.Context, ownerID string) ([]domain.SharedItinerary, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []domain.SharedItinerary{}
+	for _, it := range r.itineraries {
+		if it.OwnerID == ownerID {
+			cp := *it
+			cp.Permissions = append([]domain.AccessPermission(nil), it.Permissions...)
+			cp.Requests = append([]domain.AccessRequest(nil), it.Requests...)
+			out = append(out, cp)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeRepo) Create(_ context.Context, it domain.SharedItinerary) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -342,5 +357,45 @@ func TestCreateAndArrangementValidation(t *testing.T) {
 	}
 	if _, err := svc.GetItinerary(ctx, "ana", "inexistente"); !errors.Is(err, ErrItineraryNotFound) {
 		t.Fatalf("itinerario inexistente: %v", err)
+	}
+}
+
+// Fase 7: "Mis itinerarios" muestra reservas, accesos vigentes y solo solicitudes pendientes; no los de otro dueño.
+func TestListOwnedItinerariesShowsPendingRequestsAndActiveAccessOnly(t *testing.T) {
+	svc, _ := newService()
+	ctx := context.Background()
+	it, err := svc.CreateItinerary(ctx, "ana", "Europa", []string{"a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, who := range []string{"beto", "caro", "dani"} {
+		if _, err := svc.RequestAccess(ctx, who, it.ItineraryID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reqs, _ := svc.ListRequests(ctx, "ana", it.ItineraryID)
+	_, _ = svc.DecideRequest(ctx, "ana", it.ItineraryID, reqs[0].RequestID, ports.DecisionAccept) // beto: acceso
+	_, _ = svc.DecideRequest(ctx, "ana", it.ItineraryID, reqs[1].RequestID, ports.DecisionReject) // caro: rechazada
+	if _, err := svc.CreateItinerary(ctx, "ana", "Otro", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := svc.ListOwnedItineraries(ctx, "ana")
+	if err != nil || len(list) != 2 {
+		t.Fatalf("itinerarios de ana: %v %v", list, err)
+	}
+	for _, got := range list {
+		if got.ItineraryID != it.ItineraryID {
+			continue
+		}
+		if len(got.Arrangements) != 1 || len(got.Permissions) != 1 || got.Permissions[0].AuthorizedTravelerID != "beto" {
+			t.Fatalf("reservas/accesos: %+v", got)
+		}
+		if len(got.Requests) != 1 || got.Requests[0].RequesterTravelerID != "dani" {
+			t.Fatalf("solo la pendiente de dani: %+v", got.Requests)
+		}
+	}
+	if other, _ := svc.ListOwnedItineraries(ctx, "beto"); len(other) != 0 {
+		t.Fatalf("beto no es dueño de nada: %v", other)
 	}
 }

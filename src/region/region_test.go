@@ -300,3 +300,47 @@ func TestFlow57DataNodeFailoverServesSyncedData(t *testing.T) {
 		return ok && hb.Rol == "ACTIVO"
 	})
 }
+
+// [ADR-21] De punta a punta: cae el activo, el pasivo toma el control y recibe escrituras; el caído se recupera,
+// recibe la imagen completa con lo escrito mientras estaba caído y, si ahora cae el nuevo activo, conmuta de vuelta
+// sin perder datos.
+func TestDataNodeRecoversAsPassiveAndFailsBackWithoutDataLoss(t *testing.T) {
+	e := newEnv(t)
+	e.do(t, "POST", "/registro", "", creds("ana@example.com", "clave-segura-1"))
+	if _, err := e.reg.ActiveNode.SyncNow(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	first, second := e.reg.ActiveNode, e.reg.PassiveNode
+
+	first.Stop()
+	waitFor(t, "E4 emitido", func() bool { return len(e.reg.Swaps()) == 1 })
+	if e.reg.Switch.PassiveReady() {
+		t.Fatal("el nodo caído no es respaldo válido")
+	}
+	// Se escribe mientras el anterior activo está caído: solo lo tiene el nuevo activo.
+	if resp, body := e.do(t, "POST", "/registro", "", creds("luis@example.com", "clave-segura-2")); resp.StatusCode != 201 {
+		t.Fatalf("registro con un solo nodo: %d %v", resp.StatusCode, body)
+	}
+
+	first.Recover()
+	waitFor(t, "E4b reincorporación", func() bool { return len(e.reg.Rejoins()) >= 1 })
+	if !e.reg.Switch.PassiveReady() || e.reg.Rejoins()[0].Nodo != first.ID() {
+		t.Fatalf("el nodo recuperado debía quedar como pasivo válido: %+v", e.reg.Rejoins())
+	}
+
+	// Cae el nuevo activo: se conmuta de vuelta y los datos escritos durante la caída siguen ahí.
+	second.Stop()
+	waitFor(t, "conmutación de vuelta", func() bool { return len(e.reg.Swaps()) == 2 })
+	if e.reg.Switch.ActiveID() != first.ID() {
+		t.Fatalf("debía volver a ser activo %s, es %s", first.ID(), e.reg.Switch.ActiveID())
+	}
+	for _, who := range []string{"ana@example.com", "luis@example.com"} {
+		pw := "clave-segura-1"
+		if who == "luis@example.com" {
+			pw = "clave-segura-2"
+		}
+		if resp, body := e.do(t, "POST", "/login", "", creds(who, pw)); resp.StatusCode != 200 {
+			t.Fatalf("login de %s tras volver: %d %v", who, resp.StatusCode, body)
+		}
+	}
+}

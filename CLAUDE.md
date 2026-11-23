@@ -29,10 +29,9 @@ Eres un Ingeniero de Software Senior encargado de implementar el prototipo del s
 
 ### Equivalencias de Producción a Prototipo (Restricciones Técnicas Locales)
 Cuando `ArchitectureDesign.md` o un ADR especifique tecnologías/protocolos productivos inviables en local, **NO los omitas estructuralmente**; reemplaza su infraestructura por el equivalente simulado detrás de la misma interfaz/middleware:
-- **HTTPS / TLS:** HTTP plano en localhost. Comentario // [Prototipo] HTTP local simulando HTTPS/TLS.
 - **OAuth 2.0 / OIDC / SSO externo:** Implementar un `MockOAuth2AuthAdapter`, el flujo código → intercambio → tokens → revocación es idéntico, con códigos y tokens determinísticos.
 - **Cache / Cola:** Reemplazar por `InMemoryCacheAdapter` y `InMemoryMessageQueue`.
-- **Multi-región / Balanceadores / Auto-scaling:** No implementar infraestructura cloud ni Terraform/Kubernetes. Ejecutar como proceso único local (o `docker-compose.yml` mínimo), manteniendo las fronteras lógicas de cada contenedor/servicio como módulos desacoplados.
+- **Multi-región / Balanceadores / Auto-scaling:** No implementar infraestructura cloud ni Terraform/Kubernetes.
 
 ## 5. Reglas de Ahorro de Tokens y Flujo de Trabajo
 - **Fuente de verdad:** Usa `@ArchitectureDesign.md` y `@ImplementationPlan.md`. **NO leas** archivos dentro de `docs/` (iteraciones o ADRs individuales) a menos que se te pida explícitamente revisar un ADR puntual.

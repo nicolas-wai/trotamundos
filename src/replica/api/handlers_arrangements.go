@@ -12,6 +12,7 @@ import (
 	"github.com/nicolas-wai/trotamundos/src/contracts/httpdto"
 	"github.com/nicolas-wai/trotamundos/src/httpresponse"
 	"github.com/nicolas-wai/trotamundos/src/ports"
+	permdomain "github.com/nicolas-wai/trotamundos/src/replica/permissions/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
@@ -55,11 +56,19 @@ func (c *Controllers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		writeArrangementError(w, err)
 		return
 	}
+	// "Mis itinerarios" viaja en los datos del dashboard, sin rutas nuevas [ADR-13]. Si Permisos no responde, el
+	// dashboard se entrega igual sin esa sección: las reservas no dependen de los itinerarios.
+	var itineraries []permdomain.SharedItinerary
+	if c.deps.Permissions != nil {
+		itineraries, _ = c.deps.Permissions.ListOwnedItineraries(r.Context(), travelerIDFrom(r.Context()))
+	}
 	if wantsJSON(r) {
-		httpresponse.WriteJSON(w, http.StatusOK, dashboardToDTO(dashboard))
+		out := dashboardToDTO(dashboard)
+		out.Itinerarios = ownedItinerariesToDTO(itineraries)
+		httpresponse.WriteJSON(w, http.StatusOK, out)
 		return
 	}
-	body, err := c.deps.Renderer.RenderDashboard(r.Context(), dashboard)
+	body, err := c.deps.Renderer.RenderDashboard(r.Context(), dashboard, itineraries)
 	if err != nil {
 		writeArrangementError(w, err)
 		return
@@ -132,7 +141,7 @@ func inputFromDTO(req httpdto.ArrangementRequest) application.ArrangementInput {
 
 // dashboardToDTO arma la representación JSON de §6.2 (móvil ◇), siempre con listas (nunca null).
 func dashboardToDTO(d application.Dashboard) httpdto.DashboardResponse {
-	out := httpdto.DashboardResponse{Viajes: []httpdto.TripSummary{}, AvisosProveedores: []httpdto.ProviderNotice{}}
+	out := httpdto.DashboardResponse{Viajes: []httpdto.TripSummary{}, AvisosProveedores: []httpdto.ProviderNotice{}, Itinerarios: []httpdto.OwnedItinerary{}}
 	for _, t := range d.Trips {
 		ts := httpdto.TripSummary{
 			IDViaje: t.TripID, Nombre: t.Name, Destino: t.Destination,
@@ -169,4 +178,28 @@ func detailToDTO(a domain.TravelArrangement) httpdto.ArrangementDetailResponse {
 		IDArreglo: a.ArrangementID, IDViaje: a.TripID, Tipo: string(a.Type), Estado: string(a.Status),
 		Origen: string(a.Origin), Remitente: sender, Detalle: detalle, ActualizadoEn: a.UpdatedAt,
 	}
+}
+
+// ownedItinerariesToDTO arma "itinerarios" del dashboard (§6.2), siempre con listas (nunca null). [ADR-13]
+func ownedItinerariesToDTO(list []permdomain.SharedItinerary) []httpdto.OwnedItinerary {
+	out := []httpdto.OwnedItinerary{}
+	for _, it := range list {
+		o := httpdto.OwnedItinerary{
+			IDItinerario: it.ItineraryID, Nombre: it.Name, LinkPublico: it.PublicLink,
+			Arreglos: []httpdto.ArrangementSummary{}, Accesos: []string{}, Solicitudes: []httpdto.AccessRequestItem{},
+		}
+		for _, a := range it.Arrangements {
+			o.Arreglos = append(o.Arreglos, httpdto.ArrangementSummary{
+				IDArreglo: a.ArrangementID, Tipo: a.Type, Titulo: a.Title, FechaInicio: a.StartAt, Estado: a.Status, Origen: a.Origin,
+			})
+		}
+		for _, p := range it.Permissions {
+			o.Accesos = append(o.Accesos, p.AuthorizedTravelerID)
+		}
+		for _, q := range it.Requests {
+			o.Solicitudes = append(o.Solicitudes, httpdto.AccessRequestItem{IDSolicitud: q.RequestID, IDViajero: q.RequesterTravelerID, Estado: string(q.Status)})
+		}
+		out = append(out, o)
+	}
+	return out
 }

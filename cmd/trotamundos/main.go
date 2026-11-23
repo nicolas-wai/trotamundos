@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/config"
+	"github.com/nicolas-wai/trotamundos/src/loadbalancer"
 	"github.com/nicolas-wai/trotamundos/src/region"
 )
 
@@ -36,7 +38,12 @@ func run(cfg config.RegionConfig) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// [Prototipo] HTTP local simulando HTTPS/TLS [ADR-12]: aplica a Cliente→LB→Réplica y a las conexiones con proveedores.
+	// [ADR-12] Cliente→LB→Réplica van por https con un certificado autofirmado (data/tls/). No se abre ningún
+	// puerto http. Las conexiones con proveedores son stubs en proceso: no hay red ni TLS que aplicar ahí.
+	material, err := loadbalancer.LoadOrCreateTLS(filepath.Join(cfg.DataDir, "tls"))
+	if err != nil {
+		return fmt.Errorf("certificado TLS: %w", err)
+	}
 	reg, err := region.New(cfg, region.Options{})
 	if err != nil {
 		return err
@@ -46,17 +53,17 @@ func run(cfg config.RegionConfig) error {
 	var servers []*http.Server
 	var targets []*url.URL
 	for i, port := range cfg.ReplicaPorts() {
-		servers = append(servers, &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: reg.Replicas[i].Handler()})
-		targets = append(targets, &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
+		servers = append(servers, &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: reg.Replicas[i].Handler(), TLSConfig: material.ServerConfig()})
+		targets = append(targets, &url.URL{Scheme: "https", Host: fmt.Sprintf("127.0.0.1:%d", port)})
 	}
-	servers = append(servers, &http.Server{Addr: fmt.Sprintf(":%d", cfg.LoadBalancerPort), Handler: reg.NewLoadBalancer(targets)})
+	servers = append(servers, &http.Server{Addr: fmt.Sprintf(":%d", cfg.LoadBalancerPort), Handler: reg.NewLoadBalancer(targets, loadbalancer.WithBackendTLS(material)), TLSConfig: material.ServerConfig()})
 	reg.Start(ctx)
 
 	errCh := make(chan error, len(servers))
 	for _, s := range servers {
 		go func() {
-			log.Printf("escuchando en %s", s.Addr)
-			if err := s.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("escuchando en https://%s", s.Addr)
+			if err := s.ListenAndServeTLS("", ""); !errors.Is(err, http.ErrServerClosed) {
 				errCh <- err
 			}
 		}()

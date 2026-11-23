@@ -219,7 +219,7 @@ func TestCrudWritesAndDashboardReadsAreQueuedWithTheirKind(t *testing.T) {
 	e.dashboardJSON(t, token)
 	ops := e.spy.since(mark)
 	kinds, owners := resources(ops)
-	if len(ops) == 0 || len(kinds) != 3 || kinds["trip.list"] != events.OperationRead || kinds["arrangement.list_summaries"] != events.OperationRead || kinds["directory.provider_notice.list"] != events.OperationRead {
+	if len(ops) == 0 || len(kinds) != 4 || kinds["itinerary.list_by_owner"] != events.OperationRead || kinds["trip.list"] != events.OperationRead || kinds["arrangement.list_summaries"] != events.OperationRead || kinds["directory.provider_notice.list"] != events.OperationRead {
 		t.Fatalf("el dashboard debe leer viajes y arreglos como LECTURA: %+v", ops)
 	}
 	for _, op := range ops {

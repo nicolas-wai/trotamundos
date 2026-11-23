@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS linked_email_accounts (
     proveedor TEXT NOT NULL,
     encrypted_access_token BLOB,
     encrypted_refresh_token BLOB,
-    estado TEXT NOT NULL
+    estado TEXT NOT NULL,
+    expires_at TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS trips (
     id_viaje TEXT PRIMARY KEY,

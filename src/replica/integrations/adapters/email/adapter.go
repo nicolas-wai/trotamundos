@@ -3,6 +3,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -45,6 +46,9 @@ func (*EmailAdapter) ProviderType() domain.ProviderType { return domain.Provider
 func (a *EmailAdapter) Poll(ctx context.Context, ref ports.ProviderReference, since time.Time) ([]events.ProviderUpdateNormalized, error) {
 	token, err := a.tokens.AccessToken(ctx, ref.TravelerID, ref.AccountID)
 	if err != nil {
+		if errors.Is(err, ports.ErrProviderUnavailable) { // falla transitoria al renovar: sí cuenta como caída [ADR-07]
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %v", ports.ErrInvalidCredential, err)
 	}
 	raw, err := a.client.FetchMessages(ctx, token, since)

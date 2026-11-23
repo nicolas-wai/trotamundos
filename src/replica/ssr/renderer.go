@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nicolas-wai/trotamundos/src/client/web"
+	permdomain "github.com/nicolas-wai/trotamundos/src/replica/permissions/domain"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/application"
 	"github.com/nicolas-wai/trotamundos/src/replica/travelarrangements/domain"
 )
@@ -29,9 +30,23 @@ func NewSSRRenderer() *SSRRenderer {
 }
 
 type dashboardView struct {
-	Trips   []tripView
-	Notices []noticeView
+	Trips       []tripView
+	Notices     []noticeView
+	Itineraries []itineraryView // "Mis itinerarios" [ADR-13]
 }
+
+// itineraryView es un itinerario del dueño con lo que necesita su pantalla: reservas, solicitudes y accesos.
+type itineraryView struct {
+	ID, Name, Link string
+	Arrangements   []itineraryArrangementView
+	Requests       []travelerView // solicitudes pendientes
+	Accesses       []travelerView // accesos vigentes
+}
+
+type itineraryArrangementView struct{ ID, Title, TypeLabel, StartText string }
+
+// travelerView identifica a un viajero (por id) con, si es una solicitud, el id de la solicitud.
+type travelerView struct{ TravelerID, RequestID string }
 
 type noticeView struct{ Provider, Message string }
 
@@ -60,7 +75,8 @@ type detailView struct {
 type fieldView struct{ Label, Value string }
 
 // RenderDashboard devuelve el HTML del dashboard con solo datos críticos.
-func (r *SSRRenderer) RenderDashboard(_ context.Context, dashboard application.Dashboard) ([]byte, error) {
+// itineraries son los itinerarios del viajero como dueño; el HTML los muestra en la sección "Mis itinerarios".
+func (r *SSRRenderer) RenderDashboard(_ context.Context, dashboard application.Dashboard, itineraries []permdomain.SharedItinerary) ([]byte, error) {
 	view := dashboardView{}
 	for _, t := range dashboard.Trips {
 		tv := tripView{ID: t.TripID, Name: t.Name, Destination: t.Destination, Dates: dateRange(t.StartDate, t.EndDate)}
@@ -71,6 +87,21 @@ func (r *SSRRenderer) RenderDashboard(_ context.Context, dashboard application.D
 	}
 	for _, n := range dashboard.ProviderNotices {
 		view.Notices = append(view.Notices, noticeView{Provider: n.Provider, Message: n.Message})
+	}
+	for _, it := range itineraries {
+		iv := itineraryView{ID: it.ItineraryID, Name: it.Name, Link: it.PublicLink}
+		for _, a := range it.Arrangements {
+			iv.Arrangements = append(iv.Arrangements, itineraryArrangementView{
+				ID: a.ArrangementID, Title: a.Title, TypeLabel: label(typeLabels, a.Type), StartText: a.StartAt.UTC().Format("02/01/2006 15:04"),
+			})
+		}
+		for _, q := range it.Requests {
+			iv.Requests = append(iv.Requests, travelerView{TravelerID: q.RequesterTravelerID, RequestID: q.RequestID})
+		}
+		for _, p := range it.Permissions {
+			iv.Accesses = append(iv.Accesses, travelerView{TravelerID: p.AuthorizedTravelerID})
+		}
+		view.Itineraries = append(view.Itineraries, iv)
 	}
 	return r.execute("dashboard", view)
 }

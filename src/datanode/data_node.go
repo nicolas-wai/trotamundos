@@ -36,7 +36,11 @@ type Config struct {
 	Heartbeat         ports.HeartbeatPort
 	HeartbeatInterval time.Duration
 	SyncInterval      time.Duration // 0 desactiva el bucle periódico (SyncNow sigue disponible)
-	Catalog           *operations.Catalog
+	// ReplicationRetryInterval: cada cuánto se reintentan las replicaciones pendientes (0: solo manual con FlushReplication). [ADR-10]
+	ReplicationRetryInterval time.Duration
+	// ReplicationFault inyecta fallas en la copia a la base de lectura (solo pruebas). [ADR-10]
+	ReplicationFault func(operations.ReplicationRecord) error
+	Catalog          *operations.Catalog
 }
 
 // DataNode [ADR-10][ADR-11][ADR-21] Caché + base primaria + réplica de lectura, particionado por idViajero.
@@ -50,6 +54,11 @@ type DataNode struct {
 	syncEmitter  *SyncEmitter
 	heartbeat    *DataNodeHeartbeatEmitter
 	syncInterval time.Duration
+	retrier      *ReplicationRetrier
+	retryEvery   time.Duration
+	recoverCh    chan struct{}
+	guards       map[string]*partitionGuard // [ADR-09] evita cachear datos viejos cuando lecturas y escrituras se solapan
+	internalSubs []dataWrittenSubscriber    // suscriptores internos de E6: caché y réplica de lectura [ADR-10]
 
 	mu          sync.RWMutex
 	role        Role
@@ -60,8 +69,9 @@ type DataNode struct {
 }
 
 var (
-	_ ports.DataPort = (*DataNode)(nil)
-	_ SyncTarget     = (*DataNode)(nil)
+	_ ports.DataPort          = (*DataNode)(nil)
+	_ ports.PartitionResolver = (*DataNode)(nil)
+	_ SyncTarget              = (*DataNode)(nil)
 )
 
 // NewDataNode ensambla un nodo de datos y abre sus archivos SQLite.
@@ -86,12 +96,38 @@ func NewDataNode(cfg Config) (*DataNode, error) {
 		primary: prim, replica: repl, catalog: catalog, syncInterval: cfg.SyncInterval,
 		syncEmitter: NewSyncEmitter(cfg.ID, prim, parts, filepath.Join(cfg.Dir, "sync")),
 	}
+	n.guards = map[string]*partitionGuard{}
+	for _, p := range parts {
+		n.guards[p] = &partitionGuard{}
+	}
+	n.retrier = NewReplicationRetrier(repl, cfg.ReplicationFault)
+	n.retryEvery = cfg.ReplicationRetryInterval
+	n.recoverCh = make(chan struct{}, 1)
+	// Orden de suscripción = orden de entrega: primero se invalida la caché, después se copia a lectura. [ADR-10]
+	n.internalSubs = []dataWrittenSubscriber{cacheInvalidator{n.cache}, readReplicaReplicator{n.retrier}}
 	n.heartbeat = NewDataNodeHeartbeatEmitter(cfg.ID, cfg.Heartbeat, cfg.HeartbeatInterval, n.Role)
 	return n, nil
 }
 
 // ID devuelve el identificador del nodo.
 func (n *DataNode) ID() string { return n.id }
+
+// PartitionOf [ADR-11] Partición que atiende una operación E8; la cola de prioridades la usa para repartir el
+// trabajo entre sus workers.
+func (n *DataNode) PartitionOf(op events.QueuedOperation) (string, error) {
+	kind := operations.Read
+	if op.Tipo == events.OperationWrite {
+		kind = operations.Write
+	}
+	resolved, err := n.catalog.Resolve(op.Recurso, kind)
+	if err != nil {
+		return "", err
+	}
+	return n.router.PartitionFor(op.IDViajero, resolved.Scope)
+}
+
+// Partitions lista las particiones del nodo (shards + directory).
+func (n *DataNode) Partitions() []string { return n.router.Partitions() }
 
 // Router expone el enrutador de partición.
 func (n *DataNode) Router() *PartitionRouter { return n.router }
@@ -149,6 +185,27 @@ func (n *DataNode) Stop() {
 	}
 }
 
+// Recover simula la vuelta del nodo caído (en el mismo proceso, no hay reinicio de máquina): limpia down y
+// hace que Run reinicie su heartbeat y su contexto. El nodo vuelve como pasivo hasta recibir una imagen completa. [ADR-21]
+func (n *DataNode) Recover() {
+	n.mu.Lock()
+	wasDown := n.down
+	n.down = false
+	n.mu.Unlock()
+	if wasDown {
+		select {
+		case n.recoverCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// FlushReplication reintenta ahora las replicaciones pendientes (pruebas y recuperación manual). [ADR-10]
+func (n *DataNode) FlushReplication(ctx context.Context) { n.retrier.Flush(ctx) }
+
+// PendingReplications devuelve cuántas copias a lectura están pendientes. [ADR-10]
+func (n *DataNode) PendingReplications() int { return n.retrier.PendingCount() }
+
 // Close cierra los archivos del nodo.
 func (n *DataNode) Close() {
 	n.Stop()
@@ -180,11 +237,18 @@ func (n *DataNode) Read(ctx context.Context, travelerID string, q ports.DataQuer
 	if res, ok, _ := n.cache.Get(ctx, key); ok {
 		return res, nil
 	}
-	res, err := n.replica.Read(ctx, partition, op, q)
+	gen := n.guards[partition].generation()
+	var res ports.DataResult
+	if n.retrier.Pending(partition) {
+		// Réplica atrasada en esta partición: se lee de la primaria para no devolver datos viejos. [ADR-10]
+		res, err = n.primary.Read(ctx, partition, op, q)
+	} else {
+		res, err = n.replica.Read(ctx, partition, op, q)
+	}
 	if err != nil {
 		return ports.DataResult{}, err
 	}
-	_ = n.cache.Set(ctx, key, res)
+	n.guards[partition].cacheIfUnchanged(n.cache, ctx, key, res, gen)
 	return res, nil
 }
 
@@ -205,18 +269,22 @@ func (n *DataNode) Write(ctx context.Context, travelerID string, cmd ports.DataC
 	if err != nil {
 		return ports.DataResult{}, err
 	}
-	// E6 DatosEscritos → réplica de lectura (replicación) y caché (invalidación). Síncrono: read-your-writes.
+	// E6 DatosEscritos → suscriptores internos (invalida caché, luego copia a lectura) y externos.
+	// Síncrono: read-your-writes. Si la copia a lectura falla, la primaria ya confirmó: Write responde éxito
+	// (un error haría reintentar al cliente y duplicar) y el ReplicationRetrier deja la copia pendiente. [ADR-10]
 	e6 := events.DataWritten{IDViajero: travelerID, Entidad: op.Entity, Claves: []string{cacheKeyPrefix(partition, travelerID)}, Version: version}
-	if err := n.replica.Replicate(ctx, rec); err != nil {
-		return ports.DataResult{}, fmt.Errorf("replicando a lectura: %w", err)
+	for _, sub := range n.internalSubs {
+		sub.OnDataWritten(ctx, e6, rec)
 	}
-	_ = n.cache.Invalidate(ctx, e6.Claves...)
 	n.mu.RLock()
 	subs := append([]func(events.DataWritten){}, n.subscribers...)
 	n.mu.RUnlock()
 	for _, fn := range subs {
 		fn(e6)
 	}
+	// Con varios workers por partición una lectura lenta pudo leer antes de la copia y quedar por cachear:
+	// la guarda sube la generación e invalida otra vez, así esa lectura ya no deja datos viejos en la caché.
+	n.guards[partition].invalidate(n.cache, ctx, e6.Claves)
 	return res, nil
 }
 
@@ -231,6 +299,7 @@ func (n *DataNode) InstallSnapshot(_ context.Context, partition, snapshotPath st
 	if err := n.replica.InstallFrom(partition, n.primary.Path(partition)); err != nil {
 		return err
 	}
+	n.retrier.Clear(partition) // la réplica quedó reconstruida desde la primaria: no hay nada pendiente
 	n.cache.Flush()
 	return nil
 }
@@ -249,18 +318,42 @@ func (n *DataNode) SyncNow(ctx context.Context) (events.StateSync, error) {
 	return n.syncEmitter.SyncTo(ctx, peer)
 }
 
-// Run arranca el heartbeat y el bucle de sincronización periódica (solo emite cuando es ACTIVO)
-// y bloquea hasta que el contexto termina o el nodo se detiene.
+// Run arranca el heartbeat, el reintento de replicaciones y el bucle de sincronización periódica (solo emite
+// cuando es ACTIVO). Bloquea hasta que el contexto termina. Si el nodo se detiene (Stop) espera a Recover
+// y vuelve a arrancar. [ADR-21]
 func (n *DataNode) Run(ctx context.Context) error {
+	select { // descarta una señal vieja de Recover
+	case <-n.recoverCh:
+	default:
+	}
+	for {
+		n.runOnce(ctx)
+		if ctx.Err() != nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-n.recoverCh:
+		}
+	}
+}
+
+func (n *DataNode) runOnce(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	n.mu.Lock()
 	n.cancel = cancel
+	stopped := n.down
 	n.mu.Unlock()
 	defer cancel()
+	if stopped {
+		return
+	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() { defer wg.Done(); _ = n.heartbeat.Run(ctx) }()
+	go func() { defer wg.Done(); n.retrier.Run(ctx, n.retryEvery) }()
 
 	if n.syncInterval > 0 {
 		t := time.NewTicker(n.syncInterval)
@@ -280,5 +373,4 @@ func (n *DataNode) Run(ctx context.Context) error {
 		<-ctx.Done()
 	}
 	wg.Wait()
-	return nil
 }

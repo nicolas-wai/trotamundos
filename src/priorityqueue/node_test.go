@@ -18,6 +18,33 @@ type spyNode struct {
 	order    []string
 	promoted bool
 	demoted  bool
+	peer     ports.SyncTarget
+	syncs    int
+	syncErr  error
+}
+
+func (s *spyNode) SetPeer(p ports.SyncTarget) { s.peer = p }
+func (s *spyNode) SyncNow(context.Context) (events.StateSync, error) {
+	s.syncs++
+	if s.syncErr != nil {
+		return events.StateSync{}, s.syncErr
+	}
+	return events.StateSync{Origen: s.id, Destino: s.peer.ID(), VersionEstado: 7}, nil
+}
+func (s *spyNode) InstallSnapshot(context.Context, string, string) error { return nil }
+
+// PartitionOf: "directory" para el recurso homónimo; si no, un shard por idViajero ("v1" → shard-v1).
+func (s *spyNode) PartitionOf(op events.QueuedOperation) (string, error) {
+	if op.Recurso == "directory" {
+		return "directory", nil
+	}
+	if op.IDViajero == "" {
+		return "", fmt.Errorf("idViajero vacío")
+	}
+	return "shard-" + op.IDViajero, nil
+}
+func (s *spyNode) Partitions() []string {
+	return []string{"shard-v1", "shard-v2", "shard-v3", "directory"}
 }
 
 func (s *spyNode) ID() string { return s.id }
@@ -43,7 +70,7 @@ func op(kind, name string) events.QueuedOperation {
 // [ADR-09] Lecturas antes que escrituras encoladas antes; FIFO dentro de cada tipo.
 func TestReadsAreDispatchedBeforeEarlierWritesAndFIFOPerType(t *testing.T) {
 	active := &spyNode{id: "a"}
-	node := NewPriorityQueueNode(NewDataNodeSwitch("r", active, &spyNode{id: "p"}), nil)
+	node := NewPriorityQueueNode(NewDataNodeSwitch("r", active, &spyNode{id: "p"}), nil).WithReadWorkers(0)
 	var futs []ports.Future
 	for _, o := range []events.QueuedOperation{
 		op(events.OperationWrite, "W1"), op(events.OperationRead, "R1"),
@@ -71,13 +98,14 @@ func TestReadsAreDispatchedBeforeEarlierWritesAndFIFOPerType(t *testing.T) {
 }
 
 func TestAdmissionAssignsPriorityAndRejectsInvalidType(t *testing.T) {
-	a := NewOperationAdmission(NewReadQueue(), NewWriteQueue())
+	a := NewOperationAdmission(&spyNode{id: "a"})
 	if _, err := a.Admit(context.Background(), op("OTRO", "x")); err == nil {
 		t.Fatal("un tipo inválido debía rechazarse")
 	}
 	_, _ = a.Admit(context.Background(), op(events.OperationRead, "r"))
 	_, _ = a.Admit(context.Background(), op(events.OperationWrite, "w"))
-	if r, w := a.next(), a.next(); r.op.Prioridad != PriorityRead || w.op.Prioridad != PriorityWrite {
+	l := a.lanes["shard-v1"]
+	if r, w := l.next(), l.next(); r.op.Prioridad != PriorityRead || w.op.Prioridad != PriorityWrite {
 		t.Fatalf("prioridades %d/%d", r.op.Prioridad, w.op.Prioridad)
 	}
 }
@@ -143,5 +171,75 @@ func TestMonitorDoesNotSwapWhenPassiveIsAlsoDead(t *testing.T) {
 	NewDataHeartbeatMonitor(hb, sw, time.Hour).Check(context.Background())
 	if sw.ActiveID() != "a" {
 		t.Fatal("no debía intercambiar hacia un pasivo caído")
+	}
+}
+
+// [ADR-21] Tras la conmutación el anterior activo queda sin respaldo válido: no se conmuta de vuelta hasta que
+// vuelve a latir y recibe la imagen completa; recién entonces se emite E4b y puede ser destino de conmutación.
+func TestMonitorReincorporatesRecoveredNodeWithFullImageFirst(t *testing.T) {
+	a, p := &spyNode{id: "a"}, &spyNode{id: "p"}
+	sw := NewDataNodeSwitch("r", a, p)
+	var rejoined []events.PassiveRejoined
+	sw.OnRejoin(func(e events.PassiveRejoined) { rejoined = append(rejoined, e) })
+	var alerts []string
+	hb := &fakeHeartbeats{health: map[string]ports.NodeHealth{"a": ports.NodeDead, "p": ports.NodeAlive}}
+	m := NewDataHeartbeatMonitor(hb, sw, time.Hour)
+	m.OnAlert(func(msg string) { alerts = append(alerts, msg) })
+
+	m.Check(context.Background()) // a cae → p activo
+	if sw.ActiveID() != "p" || sw.PassiveReady() {
+		t.Fatalf("tras conmutar el nuevo pasivo no es respaldo válido: activo=%s ready=%v", sw.ActiveID(), sw.PassiveReady())
+	}
+	// a sigue caído y ahora cae p: no hay destino válido, no se conmuta y queda un aviso
+	hb.health["p"] = ports.NodeDead
+	m.Check(context.Background())
+	m.Check(context.Background())
+	if sw.ActiveID() != "p" || len(alerts) != 1 {
+		t.Fatalf("ambos caídos: activo=%s avisos=%v (uno por episodio)", sw.ActiveID(), alerts)
+	}
+	// p vuelve, a sigue caído. a vuelve a latir pero sin imagen no es destino: antes de reincorporar, no cuenta
+	hb.health["p"] = ports.NodeAlive
+	hb.health["a"] = ports.NodeAlive
+	if sw.PassiveReady() {
+		t.Fatal("no debía contar como respaldo antes de la imagen")
+	}
+	m.Check(context.Background())
+	if !sw.PassiveReady() || len(rejoined) != 1 || rejoined[0].Nodo != "a" || rejoined[0].VersionEstado != 7 || p.syncs != 1 || p.peer.ID() != "a" {
+		t.Fatalf("reincorporación: ready=%v e4b=%+v syncs=%d", sw.PassiveReady(), rejoined, p.syncs)
+	}
+	m.Check(context.Background()) // ya sincronizado: no vuelve a copiar
+	if p.syncs != 1 {
+		t.Fatal("copia espuria")
+	}
+	// ahora puede conmutar de vuelta
+	hb.health["p"] = ports.NodeDead
+	m.Check(context.Background())
+	if sw.ActiveID() != "a" {
+		t.Fatal("con el pasivo sincronizado debía conmutar de vuelta")
+	}
+}
+
+// [ADR-21] Si el activo cae y el pasivo todavía no recibió la imagen, el monitor no lo usa como destino.
+func TestMonitorDoesNotSwapToPassiveWithoutImage(t *testing.T) {
+	a, p := &spyNode{id: "a"}, &spyNode{id: "p"}
+	sw := NewDataNodeSwitch("r", a, p)
+	sw.MarkPassiveStale()
+	hb := &fakeHeartbeats{health: map[string]ports.NodeHealth{"a": ports.NodeDead, "p": ports.NodeAlive}}
+	m := NewDataHeartbeatMonitor(hb, sw, time.Hour)
+	var alerts []string
+	m.OnAlert(func(s string) { alerts = append(alerts, s) })
+	m.Check(context.Background())
+	if sw.ActiveID() != "a" || p.promoted || len(alerts) != 1 {
+		t.Fatalf("no debía conmutar: activo=%s avisos=%v", sw.ActiveID(), alerts)
+	}
+}
+
+// Si la copia de la imagen falla, el nodo recuperado sigue sin contar como respaldo.
+func TestFailedReincorporationKeepsPassiveNotReady(t *testing.T) {
+	a, p := &spyNode{id: "a", syncErr: fmt.Errorf("sin red")}, &spyNode{id: "p"}
+	sw := NewDataNodeSwitch("r", a, p)
+	sw.MarkPassiveStale()
+	if _, err := sw.Reincorporate(context.Background()); err == nil || sw.PassiveReady() {
+		t.Fatalf("la falla debía propagarse y no declarar listo al pasivo: %v", err)
 	}
 }

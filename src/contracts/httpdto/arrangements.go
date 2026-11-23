@@ -8,6 +8,8 @@ import "time"
 type DashboardResponse struct {
 	Viajes            []TripSummary    `json:"viajes"`
 	AvisosProveedores []ProviderNotice `json:"avisosProveedores"`
+	// Itinerarios son los itinerarios compartidos del viajero como dueño (pantalla "Mis itinerarios"). [ADR-13]
+	Itinerarios []OwnedItinerary `json:"itinerarios"`
 }
 
 // TripSummary es un viaje del dashboard con sus arreglos críticos.
