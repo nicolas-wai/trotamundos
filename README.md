@@ -18,14 +18,21 @@ Por ultimo, nos toca aplicar el diseño generado en la round a un prototipo real
 
 ```
 make run          # https://localhost:8080 (balanceador); las réplicas escuchan en https://127.0.0.1:8081 y :8082
-make test         # pruebas unitarias y de integración
-make test-e2e     # pruebas de navegador (requiere `make e2e-install` una vez)
-make test-load    # prueba de carga de 500 req/s (lenta; deja el resumen en bin/load-summary.txt)
 ```
 
 Si hay archivos `.db` de una versión anterior, borrar `data/` antes de correr (`make clean`): el esquema no se migra.
 
-Todo el sistema se sirve **solo por HTTPS** [ADR-12]: no se abre ningún puerto http. Al arrancar se genera (o se reutiliza de `data/tls/`) un certificado autofirmado para `localhost` y `127.0.0.1`, por lo que **el navegador avisa la primera vez** ("la conexión no es privada"); hay que aceptar el certificado para continuar. Con `curl` usar `curl --cacert data/tls/cert.pem https://localhost:8080/`. Con Docker: `docker compose up` y abrir `https://localhost:8080`.
+El sistema se sirve por HTTPS, al arrancar se genera (o se reutiliza de `data/tls/`) un certificado autofirmado para `localhost` y `127.0.0.1`, por lo que el navegador avisa la primera vez que la conexion no es privada.
+
+## Diferencias entre el diseño y la implementación
+
+El prototipo corre en una sola PC, sin servidores. Por eso hay partes del diseño que no se pueden implementar tal cual. En todos los casos se mantienen los componentes, las interfaces y los eventos definidos en el diseño, y solo se reemplaza la infraestructura que hay detrás:
+
+- **Un nodo por máquina y escalado para 2500 req/s [ADR-08, ADR-21]:** un proceso Go simula todos los nodos y hay dos réplicas en la misma PC.
+- **Cola de mensajes P2P [ADR-04] y caché distribuida [ADR-10]:** `InMemoryMessageQueue` e `InMemoryCacheAdapter` detrás de los mismos puertos.
+- **Heartbeat por red y elección de líder por consenso [ADR-21, ADR-22]:** canal en memoria; lidera la réplica viva de menor id. Como los nodos comparten proceso, no hay red entre ellos.
+- **Proveedores de correo, agencias y sistemas de viaje reales, y TLS hacia ellos [ADR-05, ADR-12]:** stubs determinísticos con fallas inyectables.
+- **OAuth 2.0 real con los proveedores de correo [ADR-15]:** `MockOAuth2AuthAdapter` con el mismo flujo (código, intercambio, tokens, revocación).
 
 ## Método de trabajo
 Inicialmente, el grupo pensó en seguir las recomendaciones del paper "Better Together" para hacer un diseño colaborativo humano/LLM. La captura de drivers y su revisión (Paso 1 ADD) fue principalmente hecha por el grupo y, al momento de generar el archivo Architecture.md, como sugiere el paper, nos resultó difícil juzgar la validez de lo producido por el LLM. Por falta de experiencia en construcción de proyectos reales del grupo, caeríamos en el sesgo muy fácilmente.
